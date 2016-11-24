@@ -203,9 +203,9 @@ public interface GridDhtPartitionTopology {
      * @param exchId Exchange ID.
      * @param partMap Update partition map.
      * @param cntrMap Partition update counters.
-     * @return Local partition map if there were evictions or {@code null} otherwise.
+     * @return {@code True} if topology state changed.
      */
-    public GridDhtPartitionMap2 update(@Nullable GridDhtPartitionExchangeId exchId,
+    public boolean update(@Nullable GridDhtPartitionExchangeId exchId,
         GridDhtPartitionFullMap partMap,
         @Nullable Map<Integer, Long> cntrMap);
 
@@ -213,9 +213,9 @@ public interface GridDhtPartitionTopology {
      * @param exchId Exchange ID.
      * @param parts Partitions.
      * @param cntrMap Partition update counters.
-     * @return Local partition map if there were evictions or {@code null} otherwise.
+     * @return {@code True} if topology state changed.
      */
-    @Nullable public GridDhtPartitionMap2 update(@Nullable GridDhtPartitionExchangeId exchId,
+    @Nullable public boolean update(@Nullable GridDhtPartitionExchangeId exchId,
         GridDhtPartitionMap2 parts,
         @Nullable Map<Integer, Long> cntrMap);
 
