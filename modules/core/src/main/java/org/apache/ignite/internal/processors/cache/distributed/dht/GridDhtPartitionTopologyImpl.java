@@ -1079,7 +1079,7 @@ class GridDhtPartitionTopologyImpl implements GridDhtPartitionTopology {
 
             node2part = partMap;
 
-            Map<Integer, Set<UUID>> p2n = new HashMap<>(cctx.affinity().partitions(), 1.0f);
+            Map<Integer, Set<UUID>> p2n = U.newHashMap(cctx.affinity().partitions());
 
             for (Map.Entry<UUID, GridDhtPartitionMap2> e : partMap.entrySet()) {
                 for (Integer p : e.getValue().keySet()) {
@@ -1187,36 +1187,37 @@ class GridDhtPartitionTopologyImpl implements GridDhtPartitionTopology {
 
             long updateSeq = this.updateSeq.incrementAndGet();
 
-            node2part = new GridDhtPartitionFullMap(node2part, updateSeq);
+            node2part.updateSequence(updateSeq);
 
-            boolean changed = false;
+            boolean changed = cur == null || !cur.equals(parts);
 
-            if (cur == null || !cur.equals(parts))
-                changed = true;
+            if (changed)
+                node2part.put(parts.nodeId(), parts);
 
-            node2part.put(parts.nodeId(), parts);
-
-            part2node = new HashMap<>(part2node);
-
-            // Add new mappings.
-            for (Integer p : parts.keySet()) {
-                Set<UUID> ids = part2node.get(p);
-
-                if (ids == null)
-                    // Initialize HashSet to size 3 in anticipation that there won't be
-                    // more than 3 nodes per partition.
-                    part2node.put(p, ids = U.newHashSet(3));
-
-                changed |= ids.add(parts.nodeId());
-            }
-
-            // Remove obsolete mappings.
-            if (cur != null) {
-                for (Integer p : F.view(cur.keySet(), F0.notIn(parts.keySet()))) {
+            if (changed) {
+                // Add new mappings.
+                for (Integer p : parts.keySet()) {
                     Set<UUID> ids = part2node.get(p);
 
-                    if (ids != null)
-                        changed |= ids.remove(parts.nodeId());
+                    if (ids == null)
+                        // Initialize HashSet to size 3 in anticipation that there won't be
+                        // more than 3 nodes per partition.
+                        part2node.put(p, ids = U.newHashSet(3));
+
+                    ids.add(parts.nodeId());
+                }
+
+                // Remove obsolete mappings.
+                if (cur != null) {
+                    for (Integer p : cur.keySet()) {
+                        if (parts.containsKey(p))
+                            continue;
+
+                        Set<UUID> ids = part2node.get(p);
+
+                        if (ids != null)
+                            ids.remove(parts.nodeId());
+                    }
                 }
             }
 
@@ -1330,7 +1331,6 @@ class GridDhtPartitionTopologyImpl implements GridDhtPartitionTopology {
     @SuppressWarnings({"MismatchedQueryAndUpdateOfCollection"})
     private void updateLocal(ClusterNode oldest, int p, UUID nodeId, GridDhtPartitionState state, long updateSeq) {
         assert nodeId.equals(cctx.nodeId());
-
         assert oldest != null || cctx.kernalContext().clientNode();
 
         // If this node became the oldest node.
@@ -1395,8 +1395,6 @@ class GridDhtPartitionTopologyImpl implements GridDhtPartitionTopology {
             }
             else
                 node2part = new GridDhtPartitionFullMap(node2part, node2part.updateSequence());
-
-            part2node = new HashMap<>(part2node);
 
             GridDhtPartitionMap2 parts = node2part.remove(nodeId);
 
@@ -1467,18 +1465,6 @@ class GridDhtPartitionTopologyImpl implements GridDhtPartitionTopology {
     }
 
     /** {@inheritDoc} */
-    @Nullable @Override public GridDhtPartitionMap2 partitions(UUID nodeId) {
-        lock.readLock().lock();
-
-        try {
-            return node2part.get(nodeId);
-        }
-        finally {
-            lock.readLock().unlock();
-        }
-    }
-
-    /** {@inheritDoc} */
     @Override public Map<Integer, Long> updateCounters(boolean skipZeros) {
         lock.readLock().lock();
 
@@ -1528,6 +1514,30 @@ class GridDhtPartitionTopologyImpl implements GridDhtPartitionTopology {
         AffinityTopologyVersion curTopVer = this.topVer;
 
         return curTopVer.equals(topVer) && curTopVer.equals(rebalancedTopVer);
+    }
+
+    /** {@inheritDoc} */
+    @Override public boolean hasMovingPartitions() {
+        lock.readLock().lock();
+
+        try {
+            assert node2part != null && node2part.valid() : "Invalid node2part [node2part: " + node2part +
+                ", cache=" + cctx.name() +
+                ", started=" + cctx.started() +
+                ", stopping=" + stopping +
+                ", locNodeId=" + cctx.localNode().id() +
+                ", locName=" + cctx.gridName() + ']';
+
+            for (GridDhtPartitionMap2 map : node2part.values()) {
+                if (map.hasMovingPartitions())
+                    return true;
+            }
+
+            return false;
+        }
+        finally {
+            lock.readLock().unlock();
+        }
     }
 
     /** {@inheritDoc} */
@@ -1612,10 +1622,12 @@ class GridDhtPartitionTopologyImpl implements GridDhtPartitionTopology {
             if (state == match)
                 return true;
 
-            if (matches != null && matches.length > 0)
-                for (GridDhtPartitionState s : matches)
+            if (matches != null && matches.length > 0) {
+                for (GridDhtPartitionState s : matches) {
                     if (state == s)
                         return true;
+                }
+            }
         }
 
         return false;

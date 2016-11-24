@@ -392,7 +392,7 @@ public class RendezvousAffinityFunction implements AffinityFunction, Externaliza
 
                     System.arraycopy(nodeHashBytes0, 0, nodeHashBytes, 4, nodeHashBytes0.length);
 
-                    nodesHash.put(node, nodeHashBytes0);
+                    nodesHash.put(node, nodeHashBytes);
                 }
 
                 U.intToBytes(part, nodeHashBytes, 0);

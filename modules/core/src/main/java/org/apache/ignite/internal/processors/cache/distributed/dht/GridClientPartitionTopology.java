@@ -536,7 +536,8 @@ public class GridClientPartitionTopology implements GridDhtPartitionTopology {
 
         try {
             assert node2part != null && node2part.valid() : "Invalid node2part [node2part: " + node2part +
-                ", locNodeId=" + cctx.localNodeId() + ", gridName=" + cctx.gridName() + ']';
+                ", locNodeId=" + cctx.localNodeId() +
+                ", gridName=" + cctx.gridName() + ']';
 
             GridDhtPartitionFullMap m = node2part;
 
@@ -675,8 +676,6 @@ public class GridClientPartitionTopology implements GridDhtPartitionTopology {
                 lastExchangeId = exchId;
 
             if (node2part == null) {
-                U.dumpStack(log, "Created invalid: " + node2part);
-
                 // Create invalid partition map.
                 node2part = new GridDhtPartitionFullMap();
             }
@@ -693,36 +692,37 @@ public class GridClientPartitionTopology implements GridDhtPartitionTopology {
 
             long updateSeq = this.updateSeq.incrementAndGet();
 
-            node2part = new GridDhtPartitionFullMap(node2part, updateSeq);
+            node2part.updateSequence(updateSeq);
 
-            boolean changed = false;
+            boolean changed = cur == null || !cur.equals(parts);
 
-            if (cur == null || !cur.equals(parts))
-                changed = true;
+            if (changed)
+                node2part.put(parts.nodeId(), parts);
 
-            node2part.put(parts.nodeId(), parts);
-
-            part2node = new HashMap<>(part2node);
-
-            // Add new mappings.
-            for (Integer p : parts.keySet()) {
-                Set<UUID> ids = part2node.get(p);
-
-                if (ids == null)
-                    // Initialize HashSet to size 3 in anticipation that there won't be
-                    // more than 3 nodes per partition.
-                    part2node.put(p, ids = U.newHashSet(3));
-
-                changed |= ids.add(parts.nodeId());
-            }
-
-            // Remove obsolete mappings.
-            if (cur != null) {
-                for (Integer p : F.view(cur.keySet(), F0.notIn(parts.keySet()))) {
+            if (changed) {
+                // Add new mappings.
+                for (Integer p : parts.keySet()) {
                     Set<UUID> ids = part2node.get(p);
 
-                    if (ids != null)
-                        changed |= ids.remove(parts.nodeId());
+                    if (ids == null)
+                        // Initialize HashSet to size 3 in anticipation that there won't be
+                        // more than 3 nodes per partition.
+                        part2node.put(p, ids = U.newHashSet(3));
+
+                    ids.add(parts.nodeId());
+                }
+
+                // Remove obsolete mappings.
+                if (cur != null) {
+                    for (Integer p : cur.keySet()) {
+                        if (parts.containsKey(p))
+                            continue;
+
+                        Set<UUID> ids = part2node.get(p);
+
+                        if (ids != null)
+                            ids.remove(parts.nodeId());
+                    }
                 }
             }
 
@@ -877,18 +877,6 @@ public class GridClientPartitionTopology implements GridDhtPartitionTopology {
     }
 
     /** {@inheritDoc} */
-    @Nullable @Override public GridDhtPartitionMap2 partitions(UUID nodeId) {
-        lock.readLock().lock();
-
-        try {
-            return node2part.get(nodeId);
-        }
-        finally {
-            lock.readLock().unlock();
-        }
-    }
-
-    /** {@inheritDoc} */
     @Override public Map<Integer, Long> updateCounters(boolean skipZeros) {
         lock.readLock().lock();
 
@@ -916,6 +904,27 @@ public class GridClientPartitionTopology implements GridDhtPartitionTopology {
         assert false : "Should not be called on non-affinity node";
 
         return false;
+    }
+
+    /** {@inheritDoc} */
+    @Override public boolean hasMovingPartitions() {
+        lock.readLock().lock();
+
+        try {
+            assert node2part != null && node2part.valid() : "Invalid node2part [node2part: " + node2part +
+                ", locNodeId=" + cctx.localNodeId() +
+                ", gridName=" + cctx.gridName() + ']';
+
+            for (GridDhtPartitionMap2 map : node2part.values()) {
+                if (map.hasMovingPartitions())
+                    return true;
+            }
+
+            return false;
+        }
+        finally {
+            lock.readLock().unlock();
+        }
     }
 
     /** {@inheritDoc} */

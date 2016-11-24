@@ -195,6 +195,11 @@ public interface GridDhtPartitionTopology {
     public GridDhtPartitionFullMap partitionMap(boolean onlyActive);
 
     /**
+     * @return {@code True} If one of cache nodes has partitions in {@link GridDhtPartitionState#MOVING} state.
+     */
+    public boolean hasMovingPartitions();
+
+    /**
      * @param e Entry removed from cache.
      */
     public void onRemoved(GridDhtCacheEntry e);
@@ -236,12 +241,6 @@ public interface GridDhtPartitionTopology {
      * @param updateSeq Update sequence increment flag.
      */
     public void onEvicted(GridDhtLocalPartition part, boolean updateSeq);
-
-    /**
-     * @param nodeId Node to get partitions for.
-     * @return Partitions for node.
-     */
-    @Nullable public GridDhtPartitionMap2 partitions(UUID nodeId);
 
     /**
      * Prints memory stats.

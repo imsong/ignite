@@ -28,6 +28,7 @@ import org.apache.ignite.internal.util.typedef.internal.S;
 import org.apache.ignite.internal.util.typedef.internal.U;
 import org.apache.ignite.lang.IgniteUuid;
 import org.apache.ignite.spi.discovery.tcp.messages.TcpDiscoveryAbstractMessage;
+import org.apache.ignite.spi.discovery.tcp.messages.TcpDiscoveryCustomEventMessage;
 import org.apache.ignite.spi.discovery.tcp.messages.TcpDiscoveryNodeAddedMessage;
 import org.apache.ignite.spi.discovery.tcp.messages.TcpDiscoveryNodeFailedMessage;
 import org.apache.ignite.spi.discovery.tcp.messages.TcpDiscoveryNodeLeftMessage;
@@ -317,6 +318,7 @@ public class TcpDiscoveryStatistics {
         assert time >= 0 : time;
 
         if (crdSinceTs.get() > 0 &&
+            (msg instanceof TcpDiscoveryCustomEventMessage) ||
             (msg instanceof TcpDiscoveryNodeAddedMessage) ||
             (msg instanceof TcpDiscoveryNodeLeftMessage) ||
             (msg instanceof TcpDiscoveryNodeFailedMessage)) {
