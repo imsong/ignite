@@ -169,14 +169,13 @@ public class GridCacheTestEntryEx extends GridMetadataAwareAdapter implements Gr
      * @param nodeId Node ID.
      * @param threadId Thread ID.
      * @param ver Lock version.
-     * @param timeout Lock acquire timeout.
      * @param ec Not used.
      * @param tx Transaction flag.
      * @return Remote candidate.
      */
-    public GridCacheMvccCandidate addRemote(UUID nodeId, long threadId, GridCacheVersion ver, long timeout,
+    public GridCacheMvccCandidate addRemote(UUID nodeId, long threadId, GridCacheVersion ver,
         boolean ec, boolean tx) {
-        return mvcc.addRemote(this, nodeId, null, threadId, ver, timeout, tx, true, false);
+        return mvcc.addRemote(this, nodeId, null, threadId, ver, tx, true, false);
     }
 
     /**
@@ -185,13 +184,12 @@ public class GridCacheTestEntryEx extends GridMetadataAwareAdapter implements Gr
      * @param nodeId Node ID.
      * @param threadId Thread ID.
      * @param ver Lock version.
-     * @param timeout Lock acquire timeout.
      * @param tx Transaction flag.
      * @return Remote candidate.
      */
-    public GridCacheMvccCandidate addNearLocal(UUID nodeId, long threadId, GridCacheVersion ver, long timeout,
+    public GridCacheMvccCandidate addNearLocal(UUID nodeId, long threadId, GridCacheVersion ver,
         boolean tx) {
-        return mvcc.addNearLocal(this, nodeId, null, threadId, ver, timeout, tx, true);
+        return mvcc.addNearLocal(this, nodeId, null, threadId, ver, tx, true);
     }
 
     /**
@@ -594,8 +592,9 @@ public class GridCacheTestEntryEx extends GridMetadataAwareAdapter implements Gr
         long timeout,
         @Nullable GridCacheVersion serOrder,
         GridCacheVersion serReadVer,
-        boolean keepBinary) {
-        assert false; return false;
+        boolean read) {
+        assert false;
+        return false;
     }
 
     /** @inheritDoc */

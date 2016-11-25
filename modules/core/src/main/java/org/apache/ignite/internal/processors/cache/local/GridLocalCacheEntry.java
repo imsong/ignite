@@ -46,7 +46,7 @@ public class GridLocalCacheEntry extends GridCacheMapEntry {
      * @param hash Key hash value.
      * @param val Entry value.
      */
-    public GridLocalCacheEntry(
+    GridLocalCacheEntry(
         GridCacheContext ctx,
         KeyCacheObject key,
         int hash,
@@ -71,10 +71,11 @@ public class GridLocalCacheEntry extends GridCacheMapEntry {
      * @param reenter Reentry flag.
      * @param tx Transaction flag.
      * @param implicitSingle Implicit transaction flag.
+     * @param read Read lock flag.
      * @return New candidate.
      * @throws GridCacheEntryRemovedException If entry has been removed.
      */
-    @Nullable public GridCacheMvccCandidate addLocal(
+    @Nullable GridCacheMvccCandidate addLocal(
         long threadId,
         GridCacheVersion ver,
         @Nullable GridCacheVersion serOrder,
@@ -83,7 +84,7 @@ public class GridLocalCacheEntry extends GridCacheMapEntry {
         boolean reenter,
         boolean tx,
         boolean implicitSingle,
-        boolean keepBinary
+        boolean read
     ) throws GridCacheEntryRemovedException {
         GridCacheMvccCandidate prev;
         GridCacheMvccCandidate cand;
@@ -121,7 +122,8 @@ public class GridLocalCacheEntry extends GridCacheMapEntry {
                 reenter,
                 tx,
                 implicitSingle,
-                /*dht-local*/false
+                /*dht-local*/false,
+                read
             );
 
             owner = mvcc.localOwner();
@@ -141,7 +143,7 @@ public class GridLocalCacheEntry extends GridCacheMapEntry {
             // Event notification.
             if (cctx.events().isRecordable(EVT_CACHE_OBJECT_LOCKED))
                 cctx.events().addEvent(partition(), key, cand.nodeId(), cand, EVT_CACHE_OBJECT_LOCKED, val, hasVal,
-                    val, hasVal, null, null, null, keepBinary);
+                    val, hasVal, null, null, null, true);
         }
 
         checkOwnerChanged(prev, owner);
@@ -181,7 +183,7 @@ public class GridLocalCacheEntry extends GridCacheMapEntry {
         long timeout,
         @Nullable GridCacheVersion serOrder,
         GridCacheVersion serReadVer,
-        boolean keepBinary)
+        boolean read)
         throws GridCacheEntryRemovedException {
         GridCacheMvccCandidate cand = addLocal(
             tx.threadId(),
@@ -192,7 +194,7 @@ public class GridLocalCacheEntry extends GridCacheMapEntry {
             /*reenter*/false,
             /*tx*/true,
             tx.implicitSingle(),
-            keepBinary
+            read
         );
 
         if (cand != null) {

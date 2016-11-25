@@ -86,7 +86,7 @@ public class GridHashMapLoadTest extends GridCommonAbstractTest {
                     long timeout,
                     @Nullable GridCacheVersion serOrder,
                     GridCacheVersion serReadVer,
-                    boolean keepBinary) {
+                    boolean read) {
                     return false;
                 }
 

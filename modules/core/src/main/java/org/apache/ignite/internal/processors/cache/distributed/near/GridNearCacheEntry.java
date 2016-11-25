@@ -520,7 +520,6 @@ public class GridNearCacheEntry extends GridDistributedCacheEntry {
                 dhtNodeId,
                 threadId,
                 ver,
-                timeout,
                 tx,
                 implicitSingle);
 

@@ -396,7 +396,8 @@ public final class GridDhtLockFuture extends GridCompoundIdentityFuture<Boolean>
             timeout,
             /*reenter*/false,
             inTx(),
-            implicitSingle()
+            implicitSingle(),
+            false
         );
 
         if (c == null && timeout < 0) {

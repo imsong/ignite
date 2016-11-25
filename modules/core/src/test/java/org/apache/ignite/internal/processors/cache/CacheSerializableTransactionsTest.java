@@ -590,7 +590,7 @@ public class CacheSerializableTransactionsTest extends GridCommonAbstractTest {
     /**
      * @throws Exception If failed.
      */
-    public void testTxCommitReadOnlyGetAll(boolean needVer) throws Exception {
+    private void testTxCommitReadOnlyGetAll(boolean needVer) throws Exception {
         Ignite ignite0 = ignite(0);
 
         final IgniteTransactions txs = ignite0.transactions();
@@ -2441,6 +2441,101 @@ public class CacheSerializableTransactionsTest extends GridCommonAbstractTest {
                 destroyCache(ccfg.getName());
             }
         }
+    }
+
+    /**
+     * @throws Exception If failed.
+     */
+    public void testNoReadLockConflict() throws Exception {
+        checkNoReadLockConflict(false);
+    }
+
+    /**
+     * @throws Exception If failed.
+     */
+    public void testNoReadLockConflictGetEntry() throws Exception {
+        checkNoReadLockConflict(true);
+    }
+
+    /**
+     * @param entry If {@code true} then uses 'getEntry' to read value, otherwise uses 'get'.
+     * @throws Exception If failed.
+     */
+    private void checkNoReadLockConflict(final boolean entry) throws Exception {
+        Ignite ignite0 = ignite(0);
+
+        for (CacheConfiguration<Integer, Integer> ccfg : cacheConfigurations()) {
+            logCacheInfo(ccfg);
+
+            final AtomicInteger putKey = new AtomicInteger(1_000_000);
+
+            final int THREADS = 64;
+
+            ignite0.createCache(ccfg);
+
+            try {
+                final Ignite ignite = ignite0;
+                final IgniteCache<Integer, Integer> cache = ignite.cache(ccfg.getName());
+
+                List<Integer> readKeys = testKeys(cache);
+
+                for (final Integer readKey : readKeys) {
+                    final CyclicBarrier barrier = new CyclicBarrier(THREADS);
+
+                    cache.put(readKey, 0);
+
+                    GridTestUtils.runMultiThreaded(new Callable<Void>() {
+                        @Override public Void call() throws Exception {
+                            try (Transaction tx = ignite.transactions().txStart(OPTIMISTIC, SERIALIZABLE)) {
+                                if (entry)
+                                    cache.get(readKey);
+                                else
+                                    cache.getEntry(readKey);
+
+                                barrier.await();
+
+                                cache.put(putKey.incrementAndGet(), 0);
+
+                                tx.commit();
+                            }
+
+                            return null;
+                        }
+                    }, THREADS, "test-thread");
+                }
+            }
+            finally {
+                destroyCache(ccfg.getName());
+            }
+        }
+    }
+
+    /**
+     * @throws Exception If failed.
+     */
+    public void testReadLockPessimisticTxConflict() throws Exception {
+        // TODO: no conflict for write, read conflict with pessimistic tx.
+    }
+
+    /**
+     * @throws Exception If failed.
+     */
+    public void testReadWriteTxConflict() throws Exception {
+        // TODO: no conflict for read, conflict for write.
+    }
+
+    /**
+     * @throws Exception If failed.
+     */
+    public void testNoReadLockConflictMultiNode() throws Exception {
+        // TODO
+    }
+
+    /**
+     * @throws Exception If failed.
+     */
+    public void testReadWriteTransactionsNoDeadlock() throws Exception {
+        // TODO
     }
 
     /**

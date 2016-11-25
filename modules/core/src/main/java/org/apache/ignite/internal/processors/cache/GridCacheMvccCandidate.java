@@ -43,6 +43,7 @@ import static org.apache.ignite.internal.processors.cache.GridCacheMvccCandidate
 import static org.apache.ignite.internal.processors.cache.GridCacheMvccCandidate.Mask.LOCAL;
 import static org.apache.ignite.internal.processors.cache.GridCacheMvccCandidate.Mask.NEAR_LOCAL;
 import static org.apache.ignite.internal.processors.cache.GridCacheMvccCandidate.Mask.OWNER;
+import static org.apache.ignite.internal.processors.cache.GridCacheMvccCandidate.Mask.READ;
 import static org.apache.ignite.internal.processors.cache.GridCacheMvccCandidate.Mask.READY;
 import static org.apache.ignite.internal.processors.cache.GridCacheMvccCandidate.Mask.REENTRY;
 import static org.apache.ignite.internal.processors.cache.GridCacheMvccCandidate.Mask.REMOVED;
@@ -68,14 +69,6 @@ public class GridCacheMvccCandidate implements Externalizable,
     /** Lock version. */
     @GridToStringInclude
     private GridCacheVersion ver;
-
-    /** Maximum wait time. */
-    @GridToStringInclude
-    private long timeout;
-
-    /** Candidate timestamp. */
-    @GridToStringInclude
-    private long ts;
 
     /** Thread ID. */
     @GridToStringInclude
@@ -143,7 +136,6 @@ public class GridCacheMvccCandidate implements Externalizable,
      * @param otherVer Other version.
      * @param threadId Requesting thread ID.
      * @param ver Cache version.
-     * @param timeout Maximum wait time.
      * @param loc {@code True} if the lock is local.
      * @param reentry {@code True} if candidate is for reentry.
      * @param tx Transaction flag.
@@ -151,6 +143,7 @@ public class GridCacheMvccCandidate implements Externalizable,
      * @param nearLoc Near-local flag.
      * @param dhtLoc DHT local flag.
      * @param serOrder Version for serializable transactions ordering.
+     * @param read Read lock flag.
      */
     public GridCacheMvccCandidate(
         GridCacheEntryEx parent,
@@ -159,18 +152,19 @@ public class GridCacheMvccCandidate implements Externalizable,
         @Nullable GridCacheVersion otherVer,
         long threadId,
         GridCacheVersion ver,
-        long timeout,
         boolean loc,
         boolean reentry,
         boolean tx,
         boolean singleImplicit,
         boolean nearLoc,
         boolean dhtLoc,
-        @Nullable GridCacheVersion serOrder
+        @Nullable GridCacheVersion serOrder,
+        boolean read
     ) {
         assert nodeId != null;
         assert ver != null;
         assert parent != null;
+        assert !read || serOrder != null;
 
         this.parent = parent;
         this.nodeId = nodeId;
@@ -178,7 +172,6 @@ public class GridCacheMvccCandidate implements Externalizable,
         this.otherVer = otherVer;
         this.threadId = threadId;
         this.ver = ver;
-        this.timeout = timeout;
         this.serOrder = serOrder;
 
         mask(LOCAL, loc);
@@ -187,8 +180,7 @@ public class GridCacheMvccCandidate implements Externalizable,
         mask(SINGLE_IMPLICIT, singleImplicit);
         mask(NEAR_LOCAL, nearLoc);
         mask(DHT_LOCAL, dhtLoc);
-
-        ts = U.currentTimeMillis();
+        mask(READ, read);
 
         id = IDGEN.incrementAndGet();
     }
@@ -245,14 +237,14 @@ public class GridCacheMvccCandidate implements Externalizable,
             otherVer,
             threadId,
             ver,
-            timeout,
             local(),
             /*reentry*/true,
             tx(),
             singleImplicit(),
             nearLocal(),
             dhtLocal(),
-            serializableOrder());
+            serializableOrder(),
+            read());
 
         reentry.topVer = topVer;
 
@@ -411,20 +403,6 @@ public class GridCacheMvccCandidate implements Externalizable,
     }
 
     /**
-     * @return Maximum wait time.
-     */
-    public long timeout() {
-        return timeout;
-    }
-
-    /**
-     * @return Timestamp at the time of entering pending set.
-     */
-    public long timestamp() {
-        return ts;
-    }
-
-    /**
      * @return {@code True} if lock is local.
      */
     public boolean local() {
@@ -471,6 +449,13 @@ public class GridCacheMvccCandidate implements Externalizable,
      */
     @Nullable public GridCacheVersion serializableOrder() {
         return serOrder;
+    }
+
+    /**
+     * @return Read lock flag.
+     */
+    public boolean read() {
+        return READ.get(flags());
     }
 
     /**
@@ -610,7 +595,6 @@ public class GridCacheMvccCandidate implements Externalizable,
             ver.writeExternal(out);
         }
 
-        out.writeLong(timeout);
         out.writeLong(threadId);
         out.writeLong(id);
         out.writeShort(flags());
@@ -626,7 +610,6 @@ public class GridCacheMvccCandidate implements Externalizable,
             ver.readExternal(in);
         }
 
-        timeout = in.readLong();
         threadId = in.readLong();
         id = in.readLong();
 
@@ -635,8 +618,6 @@ public class GridCacheMvccCandidate implements Externalizable,
         mask(OWNER, OWNER.get(flags));
         mask(USED, USED.get(flags));
         mask(TX, TX.get(flags));
-
-        ts = U.currentTimeMillis();
     }
 
     /** {@inheritDoc} */
@@ -719,7 +700,10 @@ public class GridCacheMvccCandidate implements Externalizable,
         NEAR_LOCAL(0x200),
 
         /** */
-        REMOVED(0x400);
+        REMOVED(0x400),
+
+        /** */
+        READ(0x800);
 
         /** All mask values. */
         private static final Mask[] MASKS = values();
