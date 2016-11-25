@@ -218,11 +218,18 @@ public interface GridDhtPartitionTopology {
      * @param exchId Exchange ID.
      * @param parts Partitions.
      * @param cntrMap Partition update counters.
+     * @param checkEvictions Check evictions flag.
      * @return {@code True} if topology state changed.
      */
     @Nullable public boolean update(@Nullable GridDhtPartitionExchangeId exchId,
         GridDhtPartitionMap2 parts,
-        @Nullable Map<Integer, Long> cntrMap);
+        @Nullable Map<Integer, Long> cntrMap,
+        boolean checkEvictions);
+
+    /**
+     *
+     */
+    public void checkEvictions();
 
     /**
      * @param skipZeros If {@code true} then filters out zero counters.
