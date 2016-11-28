@@ -3759,6 +3759,8 @@ class ServerImpl extends TcpDiscoveryImpl {
                 if (log.isDebugEnabled())
                     log.debug("Internal order has been assigned to node: " + node);
 
+                log.info("Created TcpDiscoveryNodeAddedMessage [node=" + node.id() + ']');
+
                 TcpDiscoveryNodeAddedMessage nodeAddedMsg = new TcpDiscoveryNodeAddedMessage(locNodeId,
                     node, msg.discoveryData(), spi.gridStartTime);
 
@@ -4047,7 +4049,7 @@ class ServerImpl extends TcpDiscoveryImpl {
                     Long time = spi.stats.onRingMessageReceived(msg);
 
                     if (time != null)
-                        log.info("TcpDiscoveryNodeAddedMessage ring time: " + time);
+                        log.info("TcpDiscoveryNodeAddedMessage ring [time=" + time + ", node=" + node.id() + ']');
 
                     TcpDiscoveryNodeAddFinishedMessage addFinishMsg = new TcpDiscoveryNodeAddFinishedMessage(locNodeId,
                         node.id());
@@ -4069,6 +4071,8 @@ class ServerImpl extends TcpDiscoveryImpl {
                 }
 
                 msg.verify(locNodeId);
+
+                log.info("Process TcpDiscoveryNodeAddedMessage [node=" + node.id() + ']');
             }
             else if (!locNodeId.equals(node.id()) && ring.node(node.id()) != null) {
                 // Local node already has node from message in local topology.
@@ -4359,7 +4363,7 @@ class ServerImpl extends TcpDiscoveryImpl {
                     Long time = spi.stats.onRingMessageReceived(msg);
 
                     if (time != null)
-                        log.info("TcpDiscoveryNodeAddFinishedMessage ring time: " + time);
+                        log.info("TcpDiscoveryNodeAddFinishedMessage ring [time=" + time + ", node=" + node.id() + ']');
 
                     addMessage(new TcpDiscoveryDiscardMessage(locNodeId, msg.id(), false));
 
@@ -5249,7 +5253,7 @@ class ServerImpl extends TcpDiscoveryImpl {
                     Long time = spi.stats.onRingMessageReceived(msg);
 
                     if (time != null)
-                        log.info("TcpDiscoveryCustomEventMessage ring time: " + time);
+                        log.info("TcpDiscoveryCustomEventMessage ring [time=" + time + ", msg=" + msg + ']');
 
                     DiscoverySpiCustomMessage msgObj = null;
 
