@@ -29,6 +29,7 @@ import org.apache.ignite.internal.util.typedef.internal.U;
 import org.apache.ignite.lang.IgniteUuid;
 import org.apache.ignite.spi.discovery.tcp.messages.TcpDiscoveryAbstractMessage;
 import org.apache.ignite.spi.discovery.tcp.messages.TcpDiscoveryCustomEventMessage;
+import org.apache.ignite.spi.discovery.tcp.messages.TcpDiscoveryNodeAddFinishedMessage;
 import org.apache.ignite.spi.discovery.tcp.messages.TcpDiscoveryNodeAddedMessage;
 import org.apache.ignite.spi.discovery.tcp.messages.TcpDiscoveryNodeFailedMessage;
 import org.apache.ignite.spi.discovery.tcp.messages.TcpDiscoveryNodeLeftMessage;
@@ -320,6 +321,7 @@ public class TcpDiscoveryStatistics {
         if (crdSinceTs.get() > 0 &&
             (msg instanceof TcpDiscoveryCustomEventMessage) ||
             (msg instanceof TcpDiscoveryNodeAddedMessage) ||
+            (msg instanceof TcpDiscoveryNodeAddFinishedMessage) ||
             (msg instanceof TcpDiscoveryNodeLeftMessage) ||
             (msg instanceof TcpDiscoveryNodeFailedMessage)) {
             ringMsgsSndTs.put(msg.id(), U.currentTimeMillis());
@@ -383,7 +385,7 @@ public class TcpDiscoveryStatistics {
      *
      * @param msg Message.
      */
-    public synchronized void onRingMessageReceived(TcpDiscoveryAbstractMessage msg) {
+    public synchronized Long onRingMessageReceived(TcpDiscoveryAbstractMessage msg) {
         assert msg != null;
 
         Long sentTs = ringMsgsSndTs.get(msg.id());
@@ -399,7 +401,11 @@ public class TcpDiscoveryStatistics {
 
             if (ringMsgsSent != 0)
                 avgRingMsgTime = (avgRingMsgTime * (ringMsgsSent - 1) + duration) / ringMsgsSent;
+
+            return duration;
         }
+
+        return null;
     }
 
     /**
@@ -628,6 +634,10 @@ public class TcpDiscoveryStatistics {
      */
     public synchronized int socketReadersCreated() {
         return sockReadersCreated;
+    }
+
+    public synchronized int socketReaders() {
+        return sockReadersCreated - sockReadersRmv;
     }
 
     /**

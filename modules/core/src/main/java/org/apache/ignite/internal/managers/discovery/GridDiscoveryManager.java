@@ -1621,6 +1621,15 @@ public class GridDiscoveryManager extends GridManagerAdapter<DiscoverySpi> {
     }
 
     /**
+     * @param topVer Topology version.
+     * @param node Node.
+     * @return DHT caches started on given node.
+     */
+    public Collection<String> nodeCaches(AffinityTopologyVersion topVer, ClusterNode node) {
+        return resolveDiscoCache(null, topVer).nodeCaches(node);
+    }
+
+    /**
      * Gets cache remote nodes for cache with given name.
      *
      * @param topVer Topology version.
@@ -2690,6 +2699,17 @@ public class GridDiscoveryManager extends GridManagerAdapter<DiscoverySpi> {
                 nodeMap.put(n.id(), n);
 
             this.nodeMap = nodeMap;
+        }
+
+        Collection<String> nodeCaches(ClusterNode node) {
+            List<String> res = new ArrayList<>();
+
+            for (Map.Entry<String, Collection<ClusterNode>> e : affCacheNodes.entrySet()) {
+                if (F.contains(e.getValue(), node))
+                    res.add(e.getKey());
+            }
+
+            return res;
         }
 
         /**

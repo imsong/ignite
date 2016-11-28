@@ -18,6 +18,7 @@
 package org.apache.ignite.spi.discovery.tcp.messages;
 
 import java.util.Map;
+import org.apache.ignite.internal.util.tostring.GridToStringExclude;
 import org.apache.ignite.internal.util.typedef.F;
 import org.apache.ignite.internal.util.typedef.internal.S;
 import org.apache.ignite.spi.discovery.tcp.internal.TcpDiscoveryNode;
@@ -35,6 +36,10 @@ public class TcpDiscoveryJoinRequestMessage extends TcpDiscoveryAbstractMessage 
 
     /** Discovery data. */
     private final Map<Integer, byte[]> discoData;
+
+    /** */
+    @GridToStringExclude
+    private transient boolean directSndFailed;
 
     /**
      * Constructor.
@@ -77,6 +82,14 @@ public class TcpDiscoveryJoinRequestMessage extends TcpDiscoveryAbstractMessage 
      */
     public void responded(boolean responded) {
         setFlag(RESPONDED_FLAG_POS, responded);
+    }
+
+    public boolean directSendFailed() {
+        return directSndFailed;
+    }
+
+    public void directSendFailed(boolean directSndFailed) {
+        this.directSndFailed = directSndFailed;
     }
 
     /** {@inheritDoc} */

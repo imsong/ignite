@@ -1517,6 +1517,14 @@ public class CacheAffinitySharedManager<K, V> extends GridCacheSharedManagerAdap
         return assignment;
     }
 
+    public GridAffinityAssignmentCache cacheAssignment(Integer cacheId) {
+        CacheHolder holder = caches.get(cacheId);
+
+        assert holder != null;
+
+        return holder.affinity();
+    }
+
     /**
      *
      */

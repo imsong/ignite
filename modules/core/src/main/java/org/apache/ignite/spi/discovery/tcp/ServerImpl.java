@@ -176,6 +176,9 @@ class ServerImpl extends TcpDiscoveryImpl {
         IgniteProductVersion.fromString("1.5.0");
 
     /** */
+    private static final boolean SEND_JOIN_REQ_DIRECTLY = getBoolean("SEND_JOIN_REQ_DIRECTLY", false);
+
+    /** */
     private IgniteThreadPoolExecutor utilityPool;
 
     /** Nodes ring. */
@@ -926,6 +929,8 @@ class ServerImpl extends TcpDiscoveryImpl {
 
         if (log.isDebugEnabled())
             log.debug("Discovery SPI has been connected to topology with order: " + locNode.internalOrder());
+
+        log.info("Node joined topology: " + locNode);
     }
 
     /**
@@ -982,7 +987,7 @@ class ServerImpl extends TcpDiscoveryImpl {
 
             for (InetSocketAddress addr : addrs) {
                 try {
-                    Integer res = sendMessageDirectly(joinReq, addr);
+                    Integer res = sendMessageDirectly(joinReq, addr, true);
 
                     assert res != null;
 
@@ -1095,13 +1100,15 @@ class ServerImpl extends TcpDiscoveryImpl {
      *
      * @param msg Message to send.
      * @param addr Address to send message to.
+     * @param join {@code True} if sends initial node join request.
      * @return Response read from the recipient or {@code null} if no response is supposed.
      * @throws IgniteSpiException If an error occurs.
      */
-    @Nullable private Integer sendMessageDirectly(TcpDiscoveryAbstractMessage msg, InetSocketAddress addr)
+    @Nullable private Integer sendMessageDirectly(TcpDiscoveryAbstractMessage msg, InetSocketAddress addr, boolean join)
         throws IgniteSpiException {
         assert msg != null;
         assert addr != null;
+        assert !join || msg instanceof TcpDiscoveryJoinRequestMessage;
 
         Collection<Throwable> errs = null;
 
@@ -1188,7 +1195,7 @@ class ServerImpl extends TcpDiscoveryImpl {
                 // Connection has been established, but
                 // join request may not be unmarshalled on remote host.
                 // E.g. due to class not found issue.
-                joinReqSent = msg instanceof TcpDiscoveryJoinRequestMessage;
+                joinReqSent = join;
 
                 int receipt = spi.readReceipt(sock, timeoutHelper.nextTimeoutChunk(ackTimeout0));
 
@@ -3762,8 +3769,79 @@ class ServerImpl extends TcpDiscoveryImpl {
                 if (nodeAddedMsg.verified())
                     msgHist.add(nodeAddedMsg);
             }
-            else if (sendMessageToRemotes(msg))
-                sendMessageAcrossRing(msg);
+            else {
+                if (sendMessageToRemotes(msg)) {
+                    if (SEND_JOIN_REQ_DIRECTLY && !msg.directSendFailed()) {
+                        final TcpDiscoveryNode crd = resolveCoordinator();
+
+                        Collection<TcpDiscoveryNode> failedNodes;
+
+                        synchronized (mux) {
+                            failedNodes = U.arrayList(ServerImpl.this.failedNodes.keySet());
+                        }
+
+                        TcpDiscoveryNode next = ring.nextNode(failedNodes);
+
+                        if (crd != null && !crd.equals(next)) {
+                            if (log.isDebugEnabled()) {
+                                log.debug("Will send join request directly to coordinator " +
+                                    "[msg=" + msg + ", crd=" + crd + ", next=" + next + ']');
+                            }
+
+                            log.info("Will send join request directly to coordinator " +
+                                "[cnt=" + joiningNodes.size() + ", msg=" + msg + ", crd=" + crd + ", next=" + next + ']');
+
+                            utilityPool.submit(new Runnable() {
+                                @Override public void run() {
+                                    IgniteSpiException sndErr = null;
+                                    Integer res = null;
+
+                                    TcpDiscoveryJoinRequestMessage msg0 =
+                                        new TcpDiscoveryJoinRequestMessage(msg.node(), msg.discoveryData());
+
+                                    try {
+                                        res = trySendMessageDirectly(crd, msg0);
+
+                                        if (F.eq(RES_OK, res)) {
+                                            if (log.isDebugEnabled()) {
+                                                log.debug("Sent join request directly to coordinator " +
+                                                    "[msg=" + msg0 + ", crd=" + crd + ']');
+                                            }
+
+                                            log.info("Sent join request directly to coordinator " +
+                                                "[msg=" + msg0 + ", crd=" + crd + ']');
+
+                                            return;
+                                        }
+                                    }
+                                    catch (IgniteSpiException e) {
+                                        sndErr = e;
+                                    }
+
+                                    if (log.isDebugEnabled()) {
+                                        log.debug("Failed to send join request to coordinator, will process from " +
+                                            "message worker [msg=" + msg0 + ", crd=" + crd + ", err=" + sndErr +
+                                            ", res=" + res + ']');
+                                    }
+
+                                    log.info("Failed to send join request to coordinator, will process from " +
+                                        "message worker [msg=" + msg0 + ", crd=" + crd + ", err=" + sndErr +
+                                        ", res=" + res + ']');
+
+                                    msg.directSendFailed(true);
+
+                                    msgWorker.addMessage(msg);
+                                }
+                            });
+
+                            return;
+                        }
+                    }
+
+                    sendMessageAcrossRing(msg);
+                }
+
+            }
         }
 
         /**
@@ -3798,7 +3876,7 @@ class ServerImpl extends TcpDiscoveryImpl {
          * @param msg Message.
          * @throws IgniteSpiException Last failure if all attempts failed.
          */
-        private void trySendMessageDirectly(TcpDiscoveryNode node, TcpDiscoveryAbstractMessage msg)
+        private Integer trySendMessageDirectly(TcpDiscoveryNode node, TcpDiscoveryAbstractMessage msg)
             throws IgniteSpiException {
             if (node.isClient()) {
                 TcpDiscoveryNode routerNode = ring.node(node.clientRouterNodeId());
@@ -3819,25 +3897,21 @@ class ServerImpl extends TcpDiscoveryImpl {
 
                     worker.addMessage(msg);
 
-                    return;
+                    return null;
                 }
 
-                trySendMessageDirectly(routerNode, msg);
-
-                return;
+                return trySendMessageDirectly(routerNode, msg);
             }
 
             IgniteSpiException ex = null;
 
             for (InetSocketAddress addr : spi.getNodeAddresses(node, U.sameMacs(locNode, node))) {
                 try {
-                    sendMessageDirectly(msg, addr);
+                    Integer res = sendMessageDirectly(msg, addr, false);
 
                     node.lastSuccessfulAddress(addr);
 
-                    ex = null;
-
-                    break;
+                    return res;
                 }
                 catch (IgniteSpiException e) {
                     ex = e;
@@ -3846,6 +3920,8 @@ class ServerImpl extends TcpDiscoveryImpl {
 
             if (ex != null)
                 throw ex;
+
+            return null;
         }
 
         /**
@@ -3968,7 +4044,10 @@ class ServerImpl extends TcpDiscoveryImpl {
 
             if (isLocalNodeCoordinator()) {
                 if (msg.verified()) {
-                    spi.stats.onRingMessageReceived(msg);
+                    Long time = spi.stats.onRingMessageReceived(msg);
+
+                    if (time != null)
+                        log.info("TcpDiscoveryNodeAddedMessage ring time: " + time);
 
                     TcpDiscoveryNodeAddFinishedMessage addFinishMsg = new TcpDiscoveryNodeAddFinishedMessage(locNodeId,
                         node.id());
@@ -4277,7 +4356,10 @@ class ServerImpl extends TcpDiscoveryImpl {
 
             if (locNodeCoord) {
                 if (msg.verified()) {
-                    spi.stats.onRingMessageReceived(msg);
+                    Long time = spi.stats.onRingMessageReceived(msg);
+
+                    if (time != null)
+                        log.info("TcpDiscoveryNodeAddFinishedMessage ring time: " + time);
 
                     addMessage(new TcpDiscoveryDiscardMessage(locNodeId, msg.id(), false));
 
@@ -5164,7 +5246,10 @@ class ServerImpl extends TcpDiscoveryImpl {
                 else {
                     addMessage(new TcpDiscoveryDiscardMessage(getLocalNodeId(), msg.id(), true));
 
-                    spi.stats.onRingMessageReceived(msg);
+                    Long time = spi.stats.onRingMessageReceived(msg);
+
+                    if (time != null)
+                        log.info("TcpDiscoveryCustomEventMessage ring time: " + time);
 
                     DiscoverySpiCustomMessage msgObj = null;
 
@@ -5561,6 +5646,9 @@ class ServerImpl extends TcpDiscoveryImpl {
 
             ClientMessageWorker clientMsgWrk = null;
 
+            TcpDiscoveryAbstractMessage msg = null;
+            Exception sockE = null;
+
             try {
                 InputStream in;
 
@@ -5621,7 +5709,7 @@ class ServerImpl extends TcpDiscoveryImpl {
                     // Restore timeout.
                     sock.setSoTimeout(timeout);
 
-                    TcpDiscoveryAbstractMessage msg = spi.readMessage(sock, in, spi.netTimeout);
+                    msg = spi.readMessage(sock, in, spi.netTimeout);
 
                     // Ping.
                     if (msg instanceof TcpDiscoveryPingRequest) {
@@ -5726,6 +5814,8 @@ class ServerImpl extends TcpDiscoveryImpl {
                     }
                 }
                 catch (IOException e) {
+                    sockE = e;
+
                     if (log.isDebugEnabled())
                         U.error(log, "Caught exception on handshake [err=" + e +", sock=" + sock + ']', e);
 
@@ -5753,6 +5843,8 @@ class ServerImpl extends TcpDiscoveryImpl {
                     return;
                 }
                 catch (IgniteCheckedException e) {
+                    sockE = e;
+
                     if (log.isDebugEnabled())
                         U.error(log, "Caught exception on handshake [err=" + e +", sock=" + sock + ']', e);
 
@@ -5782,8 +5874,7 @@ class ServerImpl extends TcpDiscoveryImpl {
 
                 while (!isInterrupted()) {
                     try {
-                        TcpDiscoveryAbstractMessage msg = U.unmarshal(spi.marshaller(), in,
-                            U.resolveClassLoader(spi.ignite().configuration()));
+                        msg = U.unmarshal(spi.marshaller(), in, U.resolveClassLoader(spi.ignite().configuration()));
 
                         msg.senderNodeId(nodeId);
 
@@ -5810,9 +5901,12 @@ class ServerImpl extends TcpDiscoveryImpl {
 
                                 if (clientMsgWrk != null && ok)
                                     continue;
-                                else
+                                else {
+                                    log.info("Processed join request, close connection [msg=" + msg + ']');
+
                                     // Direct join request - no need to handle this socket anymore.
                                     break;
+                                }
                             }
                         }
                         else if (msg instanceof TcpDiscoveryClientReconnectMessage) {
@@ -5985,6 +6079,8 @@ class ServerImpl extends TcpDiscoveryImpl {
                             processClientHeartbeatMessage(heartbeatMsg);
                     }
                     catch (IgniteCheckedException e) {
+                        sockE = e;
+
                         if (log.isDebugEnabled())
                             U.error(log, "Caught exception on message read [sock=" + sock +
                                 ", locNodeId=" + locNodeId + ", rmtNodeId=" + nodeId + ']', e);
@@ -6012,6 +6108,8 @@ class ServerImpl extends TcpDiscoveryImpl {
                         return;
                     }
                     catch (IOException e) {
+                        sockE = e;
+
                         if (log.isDebugEnabled())
                             U.error(log, "Caught exception on message read [sock=" + sock + ", locNodeId=" + locNodeId +
                                 ", rmtNodeId=" + nodeId + ']', e);
@@ -6035,6 +6133,8 @@ class ServerImpl extends TcpDiscoveryImpl {
                 }
             }
             finally {
+                log.info("Close sock [readers=" + spi.stats.socketReaders() + ", msg=" + msg + ", err=" + sockE + ']');
+
                 if (clientMsgWrk != null) {
                     if (log.isDebugEnabled())
                         log.debug("Client connection failed [sock=" + sock + ", locNodeId=" + locNodeId +

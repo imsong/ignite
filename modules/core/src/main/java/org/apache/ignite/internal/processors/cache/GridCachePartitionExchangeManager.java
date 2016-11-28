@@ -102,6 +102,7 @@ import org.jsr166.ConcurrentLinkedDeque8;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static org.apache.ignite.IgniteSystemProperties.IGNITE_PRELOAD_RESEND_TIMEOUT;
 import static org.apache.ignite.IgniteSystemProperties.IGNITE_THREAD_DUMP_ON_EXCHANGE_TIMEOUT;
+import static org.apache.ignite.IgniteSystemProperties.getBoolean;
 import static org.apache.ignite.IgniteSystemProperties.getLong;
 import static org.apache.ignite.events.EventType.EVT_CACHE_REBALANCE_STARTED;
 import static org.apache.ignite.events.EventType.EVT_NODE_FAILED;
@@ -118,6 +119,9 @@ import static org.apache.ignite.internal.processors.cache.distributed.dht.preloa
 public class GridCachePartitionExchangeManager<K, V> extends GridCacheSharedManagerAdapter<K, V> {
     /** Exchange history size. */
     private static final int EXCHANGE_HISTORY_SIZE = 1000;
+
+    /** */
+    private boolean skipFirstExchangeMsg;
 
     /** Atomic reference for pending timeout object. */
     private AtomicReference<ResendTimeoutObject> pendingResend = new AtomicReference<>();
@@ -300,9 +304,23 @@ public class GridCachePartitionExchangeManager<K, V> extends GridCacheSharedMana
         }
     };
 
+    public boolean skipFirstExchangeMessage() {
+        return skipFirstExchangeMsg;
+    }
+
     /** {@inheritDoc} */
     @Override protected void start0() throws IgniteCheckedException {
         super.start0();
+
+        if (getBoolean("SKIP_FIRST_EXCHANGE_MSG", false)) {
+            if (cctx.kernalContext().config().isLateAffinityAssignment()) {
+                skipFirstExchangeMsg = true;
+
+                cctx.kernalContext().addNodeAttribute("SKIP_FIRST_EXCHANGE_MSG", true);
+            }
+            else
+                U.warn(log, "Can not use SKIP_FIRST_EXCHANGE_MSG optimization when late affinity assignment disabled.");
+        }
 
         exchWorker = new ExchangeWorker();
 
