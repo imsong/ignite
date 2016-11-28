@@ -4076,7 +4076,9 @@ class ServerImpl extends TcpDiscoveryImpl {
                     Long time = spi.stats.onRingMessageReceived(msg);
 
                     if (time != null)
-                        log.info("TcpDiscoveryNodeAddedMessage ring [time=" + time + ", node=" + node.id() + ']');
+                        log.info("TcpDiscoveryNodeAddedMessage ring [time=" + time +
+                            ", node=" + node.id() +
+                            ", order=" + node.internalOrder() + ']');
 
                     TcpDiscoveryNodeAddFinishedMessage addFinishMsg = new TcpDiscoveryNodeAddFinishedMessage(locNodeId,
                         node.id());
@@ -4416,7 +4418,9 @@ class ServerImpl extends TcpDiscoveryImpl {
                     Long time = spi.stats.onRingMessageReceived(msg);
 
                     if (time != null)
-                        log.info("TcpDiscoveryNodeAddFinishedMessage ring [time=" + time + ", node=" + node.id() + ']');
+                        log.info("TcpDiscoveryNodeAddFinishedMessage ring [time=" + time +
+                            ", node=" + node.id() +
+                            ", order=" + node.internalOrder() + ']');
 
                     addMessage(new TcpDiscoveryDiscardMessage(locNodeId, msg.id(), false));
 
@@ -4482,8 +4486,13 @@ class ServerImpl extends TcpDiscoveryImpl {
                     lastMsg = msg;
                 }
 
-                if (state == CONNECTED)
+                if (state == CONNECTED) {
+                    long start = U.currentTimeMillis();
+
                     notifyDiscovery(EVT_NODE_JOINED, topVer, node);
+
+                    log.info("Notify discovery node joined [time=" + (U.currentTimeMillis() - start) + ']');
+                }
 
                 try {
                     if (spi.ipFinder.isShared() && locNodeCoord && !node.isClient())
@@ -4515,7 +4524,11 @@ class ServerImpl extends TcpDiscoveryImpl {
                 }
 
                 // Discovery manager must create local joined event before spiStart completes.
+                long start = U.currentTimeMillis();
+
                 notifyDiscovery(EVT_NODE_JOINED, topVer, locNode);
+
+                log.info("Notify discovery node joined [time=" + (U.currentTimeMillis() - start) + ']');
             }
 
             if (sendMessageToRemotes(msg))
