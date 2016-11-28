@@ -760,8 +760,13 @@ class ServerImpl extends TcpDiscoveryImpl {
     /** {@inheritDoc} */
     @Override public void sendCustomEvent(DiscoverySpiCustomMessage evt) {
         try {
+            byte[] bytes = U.marshal(spi.marshaller(), evt);
+
+            if (TcpDiscoverySpi.COMPRESS_MSGS)
+                bytes = U.zip(bytes);
+
             msgWorker.addMessage(new TcpDiscoveryCustomEventMessage(getLocalNodeId(), evt,
-                U.marshal(spi.marshaller(), evt)));
+                bytes));
         }
         catch (IgniteCheckedException e) {
             throw new IgniteSpiException("Failed to marshal custom event: " + evt, e);
@@ -970,8 +975,24 @@ class ServerImpl extends TcpDiscoveryImpl {
      */
     @SuppressWarnings({"BusyWait"})
     private boolean sendJoinRequestMessage() throws IgniteSpiException {
+        Map<Integer, byte[]> discoData = spi.collectExchangeData(getLocalNodeId());
+        byte[] discoDataBytes = null;
+
+        if (TcpDiscoverySpi.COMPRESS_MSGS) {
+            try {
+                log.info("Compress join request data.");
+
+                discoDataBytes = U.zip(spi.marshaller().marshal(discoData));
+                discoData = null;
+            }
+            catch (IgniteCheckedException e) {
+                throw new IgniteSpiException(e);
+            }
+        }
+
         TcpDiscoveryAbstractMessage joinReq = new TcpDiscoveryJoinRequestMessage(locNode,
-            spi.collectExchangeData(getLocalNodeId()));
+            discoData,
+            discoDataBytes);
 
         // Time when it has been detected, that addresses from IP finder do not respond.
         long noResStart = 0;
@@ -1543,6 +1564,8 @@ class ServerImpl extends TcpDiscoveryImpl {
 
                 nodeAddedMsg.topologyHistory(hist);
             }
+            else
+                clearNodeAddedMessage(nodeAddedMsg);
         }
     }
 
@@ -3762,7 +3785,10 @@ class ServerImpl extends TcpDiscoveryImpl {
                 log.info("Created TcpDiscoveryNodeAddedMessage [node=" + node.id() + ']');
 
                 TcpDiscoveryNodeAddedMessage nodeAddedMsg = new TcpDiscoveryNodeAddedMessage(locNodeId,
-                    node, msg.discoveryData(), spi.gridStartTime);
+                    node,
+                    msg.discoveryData(),
+                    msg.discoveryDataBytes(),
+                    spi.gridStartTime);
 
                 nodeAddedMsg.client(msg.client());
 
@@ -3798,8 +3824,9 @@ class ServerImpl extends TcpDiscoveryImpl {
                                     IgniteSpiException sndErr = null;
                                     Integer res = null;
 
-                                    TcpDiscoveryJoinRequestMessage msg0 =
-                                        new TcpDiscoveryJoinRequestMessage(msg.node(), msg.discoveryData());
+                                    TcpDiscoveryJoinRequestMessage msg0 = new TcpDiscoveryJoinRequestMessage(msg.node(),
+                                        msg.discoveryData(),
+                                        msg.discoveryDataBytes());
 
                                     try {
                                         res = trySendMessageDirectly(crd, msg0);
@@ -4190,10 +4217,30 @@ class ServerImpl extends TcpDiscoveryImpl {
 
                     Map<Integer, byte[]> data = msg.newNodeDiscoveryData();
 
-                    if (data != null)
-                        spi.onExchange(node.id(), node.id(), data, U.resolveClassLoader(spi.ignite().configuration()));
+                    try {
+                        if (data == null && msg.newNodeDiscoveryDataBytes() != null)
+                            data = U.unmarshalZip(spi.marshaller(), msg.newNodeDiscoveryDataBytes(), U.resolveClassLoader(spi.ignite().configuration()));
+                    }
+                    catch (IgniteCheckedException e) {
+                        U.error(log, "Failed to unmarshall discovery data", e);
+                    }
 
-                    msg.addDiscoveryData(locNodeId, spi.collectExchangeData(node.id()));
+                    if (data != null)
+                        spi.onExchange(node.id(), node.id(), data, U.resolveClassLoader(spi.ignite().configuration()), false);
+
+                    Map<Integer, byte[]> discoData = spi.collectExchangeData(node.id());
+
+                    if (TcpDiscoverySpi.COMPRESS_MSGS) {
+                        try {
+                            for (Map.Entry<Integer, byte[]> e : discoData.entrySet())
+                                e.setValue(U.zip(e.getValue()));
+                        }
+                        catch (IgniteCheckedException e) {
+                            U.error(log, "Failed to compress message data", e);
+                        }
+                    }
+
+                    msg.addDiscoveryData(locNodeId, discoData);
 
                     processMessageFailedNodes(msg);
                 }
@@ -4317,9 +4364,15 @@ class ServerImpl extends TcpDiscoveryImpl {
 
                 // Notify outside of synchronized block.
                 if (dataMap != null) {
-                    for (Map.Entry<UUID, Map<Integer, byte[]>> entry : dataMap.entrySet())
-                        spi.onExchange(node.id(), entry.getKey(), entry.getValue(),
-                            U.resolveClassLoader(spi.ignite().configuration()));
+                    ClassLoader ldr = U.resolveClassLoader(spi.ignite().configuration());
+
+                    for (Map.Entry<UUID, Map<Integer, byte[]>> entry : dataMap.entrySet()) {
+                        spi.onExchange(node.id(),
+                            entry.getKey(),
+                            entry.getValue(),
+                            ldr,
+                            TcpDiscoverySpi.COMPRESS_MSGS);
+                    }
                 }
 
                 processMessageFailedNodes(msg);
@@ -5258,7 +5311,7 @@ class ServerImpl extends TcpDiscoveryImpl {
                     DiscoverySpiCustomMessage msgObj = null;
 
                     try {
-                        msgObj = msg.message(spi.marshaller(), U.resolveClassLoader(spi.ignite().configuration()));
+                        msgObj = msg.message(spi.marshaller(), U.resolveClassLoader(spi.ignite().configuration()), TcpDiscoverySpi.COMPRESS_MSGS);
                     }
                     catch (Throwable e) {
                         U.error(log, "Failed to unmarshal discovery custom message.", e);
@@ -5269,8 +5322,13 @@ class ServerImpl extends TcpDiscoveryImpl {
 
                         if (nextMsg != null) {
                             try {
+                                byte[] bytes = U.marshal(spi.marshaller(), nextMsg);
+
+                                if (TcpDiscoverySpi.COMPRESS_MSGS)
+                                    bytes = U.zip(bytes);
+
                                 TcpDiscoveryCustomEventMessage ackMsg = new TcpDiscoveryCustomEventMessage(
-                                    getLocalNodeId(), nextMsg, U.marshal(spi.marshaller(), nextMsg));
+                                    getLocalNodeId(), nextMsg, bytes);
 
                                 ackMsg.topologyVersion(msg.topologyVersion());
 
@@ -5420,7 +5478,7 @@ class ServerImpl extends TcpDiscoveryImpl {
                 if (node != null) {
                     try {
                         DiscoverySpiCustomMessage msgObj = msg.message(spi.marshaller(),
-                            U.resolveClassLoader(spi.ignite().configuration()));
+                            U.resolveClassLoader(spi.ignite().configuration()), TcpDiscoverySpi.COMPRESS_MSGS);
 
                         lsnr.onDiscovery(DiscoveryCustomEvent.EVT_DISCOVERY_CUSTOM_EVT,
                             msg.topologyVersion(),

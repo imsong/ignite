@@ -76,9 +76,11 @@ public class TcpDiscoveryCustomEventMessage extends TcpDiscoveryAbstractMessage 
      * @return Deserialized message,
      * @throws java.lang.Throwable if unmarshal failed.
      */
-    @Nullable public DiscoverySpiCustomMessage message(@NotNull Marshaller marsh, ClassLoader ldr) throws Throwable {
+    @Nullable public DiscoverySpiCustomMessage message(@NotNull Marshaller marsh, ClassLoader ldr, boolean zip) throws Throwable {
         if (msg == null) {
-            msg = U.unmarshal(marsh, msgBytes, ldr);
+            msg = zip ?
+                (DiscoverySpiCustomMessage)U.unmarshalZip(marsh, msgBytes, ldr) :
+                (DiscoverySpiCustomMessage)U.unmarshal(marsh, msgBytes, ldr);
 
             assert msg != null;
         }

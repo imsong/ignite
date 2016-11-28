@@ -99,6 +99,8 @@ import org.apache.ignite.spi.discovery.tcp.messages.TcpDiscoveryDuplicateIdMessa
 import org.apache.ignite.spi.discovery.tcp.messages.TcpDiscoveryEnsureDelivery;
 import org.jetbrains.annotations.Nullable;
 
+import static org.apache.ignite.IgniteSystemProperties.getBoolean;
+
 /**
  * Discovery SPI implementation that uses TCP/IP for node discovery.
  * <p>
@@ -218,6 +220,9 @@ import org.jetbrains.annotations.Nullable;
 @DiscoverySpiOrderSupport(true)
 @DiscoverySpiHistorySupport(true)
 public class TcpDiscoverySpi extends IgniteSpiAdapter implements DiscoverySpi, TcpDiscoverySpiMBean {
+    /** */
+    public static final boolean COMPRESS_MSGS = getBoolean("COMPRESS_DISCO_MSGS", false);
+
     /** Failure detection timeout feature major version. */
     final static byte FAILURE_DETECTION_MAJOR_VER = 1;
 
@@ -1704,7 +1709,8 @@ public class TcpDiscoverySpi extends IgniteSpiAdapter implements DiscoverySpi, T
     protected void onExchange(UUID joiningNodeID,
         UUID nodeId,
         Map<Integer, byte[]> data,
-        ClassLoader clsLdr)
+        ClassLoader clsLdr,
+        boolean zip)
     {
         if (locNode.isDaemon())
             return;
@@ -1713,7 +1719,9 @@ public class TcpDiscoverySpi extends IgniteSpiAdapter implements DiscoverySpi, T
 
         for (Map.Entry<Integer, byte[]> entry : data.entrySet()) {
             try {
-                Serializable compData = U.unmarshal(marshaller(), entry.getValue(), clsLdr);
+                Serializable compData = zip ?
+                    (Serializable)U.unmarshalZip(marshaller(), entry.getValue(), clsLdr) :
+                    (Serializable)U.unmarshal(marshaller(), entry.getValue(), clsLdr);
 
                 data0.put(entry.getKey(), compData);
             }

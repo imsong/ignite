@@ -67,6 +67,9 @@ public class TcpDiscoveryNodeAddedMessage extends TcpDiscoveryAbstractMessage {
     /** Discovery data from new node. */
     private Map<Integer, byte[]> newNodeDiscoData;
 
+    /** */
+    private byte[] newNodeDiscoDataBytes;
+
     /** Discovery data from old nodes. */
     private Map<UUID, Map<Integer, byte[]>> oldNodesDiscoData;
 
@@ -84,6 +87,7 @@ public class TcpDiscoveryNodeAddedMessage extends TcpDiscoveryAbstractMessage {
     public TcpDiscoveryNodeAddedMessage(UUID creatorNodeId,
         TcpDiscoveryNode node,
         Map<Integer, byte[]> newNodeDiscoData,
+        byte[] newNodeDiscoDataBytes,
         long gridStartTime)
     {
         super(creatorNodeId);
@@ -93,6 +97,7 @@ public class TcpDiscoveryNodeAddedMessage extends TcpDiscoveryAbstractMessage {
 
         this.node = node;
         this.newNodeDiscoData = newNodeDiscoData;
+        this.newNodeDiscoDataBytes = newNodeDiscoDataBytes;
         this.gridStartTime = gridStartTime;
 
         oldNodesDiscoData = new LinkedHashMap<>();
@@ -112,6 +117,7 @@ public class TcpDiscoveryNodeAddedMessage extends TcpDiscoveryAbstractMessage {
         this.clientTop = msg.clientTop;
         this.topHist = msg.topHist;
         this.newNodeDiscoData = msg.newNodeDiscoData;
+        this.newNodeDiscoDataBytes = msg.newNodeDiscoDataBytes;
         this.oldNodesDiscoData = msg.oldNodesDiscoData;
         this.gridStartTime = msg.gridStartTime;
     }
@@ -226,6 +232,10 @@ public class TcpDiscoveryNodeAddedMessage extends TcpDiscoveryAbstractMessage {
      */
     public Map<Integer, byte[]> newNodeDiscoveryData() {
         return newNodeDiscoData;
+    }
+
+    public byte[] newNodeDiscoveryDataBytes() {
+        return newNodeDiscoDataBytes;
     }
 
     /**

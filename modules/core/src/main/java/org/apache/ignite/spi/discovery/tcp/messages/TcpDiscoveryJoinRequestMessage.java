@@ -41,17 +41,23 @@ public class TcpDiscoveryJoinRequestMessage extends TcpDiscoveryAbstractMessage 
     @GridToStringExclude
     private transient boolean directSndFailed;
 
+    /** */
+    private final byte[] discoDataBytes;
+
     /**
      * Constructor.
      *
      * @param node New node that wants to join.
      * @param discoData Discovery data.
      */
-    public TcpDiscoveryJoinRequestMessage(TcpDiscoveryNode node, Map<Integer, byte[]> discoData) {
+    public TcpDiscoveryJoinRequestMessage(TcpDiscoveryNode node,
+        Map<Integer, byte[]> discoData,
+        byte[] discoDataBytes) {
         super(node.id());
 
         this.node = node;
         this.discoData = discoData;
+        this.discoDataBytes = discoDataBytes;
     }
 
     /**
@@ -61,6 +67,10 @@ public class TcpDiscoveryJoinRequestMessage extends TcpDiscoveryAbstractMessage 
      */
     public TcpDiscoveryNode node() {
         return node;
+    }
+
+    public byte[] discoveryDataBytes() {
+        return discoDataBytes;
     }
 
     /**
