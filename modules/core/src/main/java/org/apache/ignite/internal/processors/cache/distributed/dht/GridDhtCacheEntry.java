@@ -27,6 +27,7 @@ import org.apache.ignite.IgniteCheckedException;
 import org.apache.ignite.cluster.ClusterNode;
 import org.apache.ignite.internal.IgniteInternalFuture;
 import org.apache.ignite.internal.processors.affinity.AffinityTopologyVersion;
+import org.apache.ignite.internal.processors.cache.CacheLockCandidates;
 import org.apache.ignite.internal.processors.cache.CacheObject;
 import org.apache.ignite.internal.processors.cache.GridCacheContext;
 import org.apache.ignite.internal.processors.cache.GridCacheEntryRemovedException;
@@ -192,8 +193,8 @@ public class GridDhtCacheEntry extends GridDistributedCacheEntry {
         assert !reenter || serOrder == null;
 
         GridCacheMvccCandidate cand;
-        GridCacheMvccCandidate prev;
-        GridCacheMvccCandidate owner;
+        CacheLockCandidates prev;
+        CacheLockCandidates owner;
 
         CacheObject val;
 
@@ -212,7 +213,7 @@ public class GridDhtCacheEntry extends GridDistributedCacheEntry {
                 mvccExtras(mvcc);
             }
 
-            prev = mvcc.anyOwner();
+            prev = mvcc.allOwners();
 
             boolean emptyBefore = mvcc.isEmpty();
 
@@ -236,10 +237,10 @@ public class GridDhtCacheEntry extends GridDistributedCacheEntry {
 
             cand.topologyVersion(topVer);
 
-            owner = mvcc.anyOwner();
+            owner = mvcc.allOwners();
 
             if (owner != null)
-                cand.ownerVersion(owner.version());
+                cand.ownerVersion(owner.candidate(0).version());
 
             boolean emptyAfter = mvcc.isEmpty();
 

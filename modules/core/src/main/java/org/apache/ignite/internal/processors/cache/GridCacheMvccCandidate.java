@@ -55,7 +55,7 @@ import static org.apache.ignite.internal.processors.cache.GridCacheMvccCandidate
  * Lock candidate.
  */
 public class GridCacheMvccCandidate implements Externalizable,
-    Comparable<GridCacheMvccCandidate> {
+    Comparable<GridCacheMvccCandidate>, CacheLockCandidates {
     /** */
     private static final long serialVersionUID = 0L;
 
@@ -164,7 +164,6 @@ public class GridCacheMvccCandidate implements Externalizable,
         assert nodeId != null;
         assert ver != null;
         assert parent != null;
-        assert !read || serOrder != null;
 
         this.parent = parent;
         this.nodeId = nodeId;
@@ -571,16 +570,21 @@ public class GridCacheMvccCandidate implements Externalizable,
         return parent0.txKey();
     }
 
-    /**
-     * Checks if this candidate matches version or thread-nodeId combination.
-     *
-     * @param nodeId Node ID to check.
-     * @param ver Version to check.
-     * @param threadId Thread ID to check.
-     * @return {@code True} if matched.
-     */
-    public boolean matches(GridCacheVersion ver, UUID nodeId, long threadId) {
-        return ver.equals(this.ver) || (nodeId.equals(this.nodeId) && threadId == this.threadId);
+    /** {@inheritDoc} */
+    @Override public GridCacheMvccCandidate candidate(int idx) {
+        assert idx == 0 : idx;
+
+        return this;
+    }
+
+    /** {@inheritDoc} */
+    @Override public int size() {
+        return 1;
+    }
+
+    /** {@inheritDoc} */
+    @Override public boolean hasCandidate(GridCacheVersion ver) {
+        return this.ver.equals(ver);
     }
 
     /** {@inheritDoc} */

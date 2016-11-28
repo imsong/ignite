@@ -21,6 +21,7 @@ import java.util.UUID;
 import org.apache.ignite.IgniteCheckedException;
 import org.apache.ignite.cluster.ClusterNode;
 import org.apache.ignite.internal.processors.affinity.AffinityTopologyVersion;
+import org.apache.ignite.internal.processors.cache.CacheLockCandidates;
 import org.apache.ignite.internal.processors.cache.CacheObject;
 import org.apache.ignite.internal.processors.cache.GridCacheContext;
 import org.apache.ignite.internal.processors.cache.GridCacheEntryInfo;
@@ -444,7 +445,8 @@ public class GridNearCacheEntry extends GridDistributedCacheEntry {
         long timeout,
         boolean reenter,
         boolean tx,
-        boolean implicitSingle) throws GridCacheEntryRemovedException {
+        boolean implicitSingle,
+        boolean read) throws GridCacheEntryRemovedException {
         return addNearLocal(
             null,
             threadId,
@@ -453,7 +455,8 @@ public class GridNearCacheEntry extends GridDistributedCacheEntry {
             timeout,
             reenter,
             tx,
-            implicitSingle
+            implicitSingle,
+            read
         );
     }
 
@@ -468,10 +471,11 @@ public class GridNearCacheEntry extends GridDistributedCacheEntry {
      * @param reenter Reentry flag.
      * @param tx Transaction flag.
      * @param implicitSingle Implicit flag.
+     * @param read Read lock flag.
      * @return New candidate.
      * @throws GridCacheEntryRemovedException If entry has been removed.
      */
-    @Nullable public GridCacheMvccCandidate addNearLocal(
+    @Nullable GridCacheMvccCandidate addNearLocal(
         @Nullable UUID dhtNodeId,
         long threadId,
         GridCacheVersion ver,
@@ -479,10 +483,11 @@ public class GridNearCacheEntry extends GridDistributedCacheEntry {
         long timeout,
         boolean reenter,
         boolean tx,
-        boolean implicitSingle)
+        boolean implicitSingle,
+        boolean read)
         throws GridCacheEntryRemovedException {
-        GridCacheMvccCandidate prev;
-        GridCacheMvccCandidate owner;
+        CacheLockCandidates prev;
+        CacheLockCandidates owner;
         GridCacheMvccCandidate cand;
 
         CacheObject val;
@@ -505,7 +510,7 @@ public class GridNearCacheEntry extends GridDistributedCacheEntry {
             if (c != null)
                 return reenter ? c.reenter() : null;
 
-            prev = mvcc.anyOwner();
+            prev = mvcc.allOwners();
 
             boolean emptyBefore = mvcc.isEmpty();
 
@@ -521,11 +526,12 @@ public class GridNearCacheEntry extends GridDistributedCacheEntry {
                 threadId,
                 ver,
                 tx,
-                implicitSingle);
+                implicitSingle,
+                read);
 
             cand.topologyVersion(topVer);
 
-            owner = mvcc.anyOwner();
+            owner = mvcc.allOwners();
 
             boolean emptyAfter = mvcc.isEmpty();
 
@@ -571,8 +577,8 @@ public class GridNearCacheEntry extends GridDistributedCacheEntry {
      * @return Removed candidate, or <tt>null</tt> if thread still holds the lock.
      */
     @Nullable @Override public GridCacheMvccCandidate removeLock() {
-        GridCacheMvccCandidate prev = null;
-        GridCacheMvccCandidate owner = null;
+        CacheLockCandidates prev = null;
+        CacheLockCandidates owner = null;
 
         CacheObject val;
 
@@ -584,7 +590,7 @@ public class GridNearCacheEntry extends GridDistributedCacheEntry {
             GridCacheMvcc mvcc = mvccExtras();
 
             if (mvcc != null) {
-                prev = mvcc.anyOwner();
+                prev = mvcc.allOwners();
 
                 boolean emptyBefore = mvcc.isEmpty();
 
@@ -604,7 +610,7 @@ public class GridNearCacheEntry extends GridDistributedCacheEntry {
 
                     mvcc.remove(cand.version());
 
-                    owner = mvcc.anyOwner();
+                    owner = mvcc.allOwners();
                 }
                 else
                     return null;
@@ -629,13 +635,12 @@ public class GridNearCacheEntry extends GridDistributedCacheEntry {
 
         cctx.mvcc().removeExplicitLock(cand);
 
-        if (prev != null && owner != prev)
-            checkThreadChain(prev);
+        checkThreadChain(cand);
 
         // This call must be outside of synchronization.
         checkOwnerChanged(prev, owner, val);
 
-        return owner != prev ? prev : null;
+        return cand;
     }
 
     /** {@inheritDoc} */

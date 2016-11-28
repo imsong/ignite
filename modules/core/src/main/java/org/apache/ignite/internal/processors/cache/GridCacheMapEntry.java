@@ -827,8 +827,6 @@ public abstract class GridCacheMapEntry extends GridMetadataAwareAdapter impleme
         if (readThrough && !cctx.readThrough())
             readThrough = false;
 
-        GridCacheMvccCandidate owner;
-
         CacheObject ret;
 
         GridCacheVersion startVer;
@@ -840,10 +838,6 @@ public abstract class GridCacheMapEntry extends GridMetadataAwareAdapter impleme
 
         synchronized (this) {
             checkObsolete();
-
-            GridCacheMvcc mvcc = mvccExtras();
-
-            owner = mvcc == null ? null : mvcc.anyOwner();
 
             boolean valid = valid(tx != null ? tx.topologyVersion() : cctx.affinity().affinityTopologyVersion());
 
@@ -899,11 +893,13 @@ public abstract class GridCacheMapEntry extends GridMetadataAwareAdapter impleme
             if (evt && cctx.events().isRecordable(EVT_CACHE_OBJECT_READ)) {
                 transformClo = EntryProcessorResourceInjectorProxy.unwrap(transformClo);
 
+                GridCacheMvcc mvcc = mvccExtras();
+
                 cctx.events().addEvent(
                     partition(),
                     key,
                     tx,
-                    owner,
+                    mvcc != null ? mvcc.anyOwner() : null,
                     EVT_CACHE_OBJECT_READ,
                     ret,
                     ret != null,
@@ -1010,11 +1006,13 @@ public abstract class GridCacheMapEntry extends GridMetadataAwareAdapter impleme
                 if (evt && cctx.events().isRecordable(EVT_CACHE_OBJECT_READ)) {
                     transformClo = EntryProcessorResourceInjectorProxy.unwrap(transformClo);
 
+                    GridCacheMvcc mvcc = mvccExtras();
+
                     cctx.events().addEvent(
                         partition(),
                         key,
                         tx,
-                        owner,
+                        mvcc != null ? mvcc.anyOwner() : null,
                         EVT_CACHE_OBJECT_READ,
                         ret,
                         ret != null,

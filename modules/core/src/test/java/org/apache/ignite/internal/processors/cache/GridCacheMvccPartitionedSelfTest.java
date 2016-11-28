@@ -601,7 +601,7 @@ public class GridCacheMvccPartitionedSelfTest extends GridCommonAbstractTest {
     /**
      * @throws Exception If failed.
      */
-    public void testSerializableReadLocks() throws Exception {
+    public void testSerializableReadLocksAdd() throws Exception {
         GridCacheAdapter<String, String> cache = grid.internalCache();
 
         GridCacheVersion serOrder1 = new GridCacheVersion(0, 0, 10, 1);
@@ -673,6 +673,117 @@ public class GridCacheMvccPartitionedSelfTest extends GridCommonAbstractTest {
 
             assertNull(cand3);
         }
+    }
+
+    /**
+     * @throws Exception If failed.
+     */
+    public void testSerializableReadLocksAssign() throws Exception {
+        GridCacheAdapter<String, String> cache = grid.internalCache();
+
+        GridCacheVersion serOrder1 = new GridCacheVersion(0, 0, 10, 1);
+        GridCacheVersion serOrder2 = new GridCacheVersion(0, 0, 20, 1);
+        GridCacheVersion serOrder3 = new GridCacheVersion(0, 0, 15, 1);
+
+        {
+            GridCacheMvcc mvcc = new GridCacheMvcc(cache.context());
+
+            GridCacheTestEntryEx e = new GridCacheTestEntryEx(cache.context(), "1");
+
+            GridCacheMvccCandidate cand1 = addLocal(mvcc, e, version(1), serOrder1, true);
+
+            assertNotNull(cand1);
+
+            GridCacheMvccCandidate cand2 = addLocal(mvcc, e, version(2), serOrder2, true);
+
+            assertNotNull(cand2);
+
+            GridCacheMvccCandidate cand3 = addLocal(mvcc, e, version(3), serOrder3, false);
+
+            assertNull(cand3);
+
+            cand3 = addLocal(mvcc, e, version(3), serOrder3, true);
+
+            assertNotNull(cand3);
+
+            CacheLockCandidates owners = mvcc.recheck();
+
+            assertNull(owners);
+
+            cand1.setReady();
+
+            owners = mvcc.recheck();
+
+            assertSame(cand1, owners);
+            checkCandidates(owners, cand1.version());
+
+            cand2.setReady();
+
+            owners = mvcc.recheck();
+            checkCandidates(owners, cand1.version(), cand2.version());
+
+            mvcc.remove(cand1.version());
+
+            owners = mvcc.recheck();
+            assertSame(cand2, owners);
+            checkCandidates(owners, cand2.version());
+        }
+
+        {
+            GridCacheMvcc mvcc = new GridCacheMvcc(cache.context());
+
+            GridCacheTestEntryEx e = new GridCacheTestEntryEx(cache.context(), "1");
+
+            GridCacheMvccCandidate cand1 = addLocal(mvcc, e, version(1), serOrder1, true);
+
+            assertNotNull(cand1);
+
+            GridCacheMvccCandidate cand2 = addLocal(mvcc, e, version(2), serOrder2, true);
+
+            assertNotNull(cand2);
+
+            GridCacheMvccCandidate cand3 = addLocal(mvcc, e, version(3), serOrder3, false);
+
+            assertNull(cand3);
+
+            cand3 = addLocal(mvcc, e, version(3), serOrder3, true);
+
+            assertNotNull(cand3);
+
+            CacheLockCandidates owners = mvcc.recheck();
+
+            assertNull(owners);
+
+            cand2.setReady();
+
+            owners = mvcc.recheck();
+
+            assertSame(cand2, owners);
+            checkCandidates(owners, cand2.version());
+
+            cand1.setReady();
+
+            owners = mvcc.recheck();
+            checkCandidates(owners, cand1.version(), cand2.version());
+
+            mvcc.remove(cand2.version());
+
+            owners = mvcc.recheck();
+            assertSame(cand1, owners);
+            checkCandidates(owners, cand1.version());
+        }
+    }
+
+    /**
+     * @param all Candidates list.
+     * @param vers Expected candidates.
+     */
+    private void checkCandidates(CacheLockCandidates all, GridCacheVersion...vers) {
+        assertNotNull(all);
+        assertEquals(vers.length, all.size());
+
+        for (GridCacheVersion ver : vers)
+            assertTrue(all.hasCandidate(ver));
     }
 
     /**
@@ -846,31 +957,31 @@ public class GridCacheMvccPartitionedSelfTest extends GridCommonAbstractTest {
 
         assertNotNull(cand4);
 
-        GridCacheMvccCandidate owner = mvcc.recheck();
+        CacheLockCandidates owners = mvcc.recheck();
 
-        assertNull(owner);
+        assertNull(owners);
 
         cand2.setReady();
 
-        owner = mvcc.recheck();
+        owners = mvcc.recheck();
 
-        assertNull(owner);
+        assertNull(owners);
 
         cand1.setReady();
 
-        owner = mvcc.recheck();
+        owners = mvcc.recheck();
 
-        assertSame(cand1, owner);
+        assertSame(cand1, owners);
 
-        owner = mvcc.recheck();
+        owners = mvcc.recheck();
 
-        assertSame(cand1, owner);
+        assertSame(cand1, owners);
 
         mvcc.remove(cand1.version());
 
-        owner = mvcc.recheck();
+        owners = mvcc.recheck();
 
-        assertSame(cand2, owner);
+        assertSame(cand2, owners);
     }
 
     /**
