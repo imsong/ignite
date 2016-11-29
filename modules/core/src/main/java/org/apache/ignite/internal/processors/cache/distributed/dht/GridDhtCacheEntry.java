@@ -136,7 +136,7 @@ public class GridDhtCacheEntry extends GridDistributedCacheEntry {
      * @return Local candidate by near version.
      * @throws GridCacheEntryRemovedException If removed.
      */
-    @Nullable public synchronized GridCacheMvccCandidate localCandidateByNearVersion(GridCacheVersion nearVer,
+    @Nullable synchronized GridCacheMvccCandidate localCandidateByNearVersion(GridCacheVersion nearVer,
         boolean rmv) throws GridCacheEntryRemovedException {
         checkObsolete();
 
@@ -166,30 +166,28 @@ public class GridDhtCacheEntry extends GridDistributedCacheEntry {
      * @param threadId Owning thread ID.
      * @param ver Lock version.
      * @param serOrder Version for serializable transactions ordering.
-     * @param serReadVer Optional read entry version for optimistic serializable transaction.
      * @param timeout Timeout to acquire lock.
      * @param reenter Reentry flag.
      * @param tx Tx flag.
      * @param implicitSingle Implicit flag.
+     * @param read Read lock flag.
      * @return New candidate.
      * @throws GridCacheEntryRemovedException If entry has been removed.
      * @throws GridDistributedLockCancelledException If lock was cancelled.
      */
-    @Nullable public GridCacheMvccCandidate addDhtLocal(
+    @Nullable GridCacheMvccCandidate addDhtLocal(
         UUID nearNodeId,
         GridCacheVersion nearVer,
         AffinityTopologyVersion topVer,
         long threadId,
         GridCacheVersion ver,
         @Nullable GridCacheVersion serOrder,
-        @Nullable GridCacheVersion serReadVer,
         long timeout,
         boolean reenter,
         boolean tx,
         boolean implicitSingle,
         boolean read)
         throws GridCacheEntryRemovedException, GridDistributedLockCancelledException {
-        assert serReadVer == null || serOrder != null;
         assert !reenter || serOrder == null;
 
         GridCacheMvccCandidate cand;
@@ -280,7 +278,6 @@ public class GridDhtCacheEntry extends GridDistributedCacheEntry {
                 tx.threadId(),
                 tx.xidVersion(),
                 serOrder,
-                serReadVer,
                 timeout,
                 /*reenter*/false,
                 /*tx*/true,

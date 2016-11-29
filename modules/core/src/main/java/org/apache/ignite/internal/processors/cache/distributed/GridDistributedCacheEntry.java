@@ -689,51 +689,57 @@ public class GridDistributedCacheEntry extends GridCacheMapEntry {
     }
 
     /**
-     * @param prev Previous owners.
-     * @param owner Corrent owners.
+     * @param prevOwners Previous owners.
+     * @param owners Current owners.
      * @param val Entry value.
      */
-    protected final void checkOwnerChanged(@Nullable CacheLockCandidates prev,
-        @Nullable CacheLockCandidates owner,
+    protected final void checkOwnerChanged(@Nullable CacheLockCandidates prevOwners,
+        @Nullable CacheLockCandidates owners,
         CacheObject val) {
         assert !Thread.holdsLock(this);
 
-        if (prev != null && cctx.events().isRecordable(EVT_CACHE_OBJECT_UNLOCKED)) {
-            for (int i = 0; i < prev.size(); i++) {
-                GridCacheMvccCandidate cand = prev.candidate(i);
+        if (prevOwners != null) {
+            for (int i = 0; i < prevOwners.size(); i++) {
+                GridCacheMvccCandidate cand = prevOwners.candidate(i);
 
-                boolean unlocked = owner == null || !owner.hasCandidate(cand.version());
+                boolean unlocked = owners == null || !owners.hasCandidate(cand.version());
 
                 if (unlocked) {
-                    boolean hasVal = hasValue();
+                    cctx.mvcc().callback().onOwnerChanged(this, null);
 
-                    cctx.events().addEvent(partition(),
-                        key,
-                        cand.nodeId(),
-                        cand,
-                        EVT_CACHE_OBJECT_UNLOCKED,
-                        val,
-                        hasVal,
-                        val, hasVal,
-                        null,
-                        null,
-                        null,
-                        true);
+                    if (cctx.events().isRecordable(EVT_CACHE_OBJECT_UNLOCKED)) {
+                        boolean hasVal = hasValue();
+
+                        cctx.events().addEvent(partition(),
+                            key,
+                            cand.nodeId(),
+                            cand,
+                            EVT_CACHE_OBJECT_UNLOCKED,
+                            val,
+                            hasVal,
+                            val, hasVal,
+                            null,
+                            null,
+                            null,
+                            true);
+                    }
+
+                    break;
                 }
             }
         }
 
-        if (owner != null) {
-            for (int i = 0; i < owner.size(); i++) {
-                GridCacheMvccCandidate cand = owner.candidate(i);
+        if (owners != null) {
+            for (int i = 0; i < owners.size(); i++) {
+                GridCacheMvccCandidate owner = owners.candidate(i);
 
-                boolean locked = prev == null || !prev.hasCandidate(cand.version());
+                boolean locked = prevOwners == null || !prevOwners.hasCandidate(owner.version());
 
                 if (locked) {
-                    cctx.mvcc().callback().onOwnerChanged(this, cand);
+                    cctx.mvcc().callback().onOwnerChanged(this, owner);
 
-                    if (cand.local())
-                        checkThreadChain(cand);
+                    if (owner.local())
+                        checkThreadChain(owner);
 
                     if (cctx.events().isRecordable(EVT_CACHE_OBJECT_LOCKED)) {
                         boolean hasVal = hasValue();
@@ -741,8 +747,8 @@ public class GridDistributedCacheEntry extends GridCacheMapEntry {
                         // Event notification.
                         cctx.events().addEvent(partition(),
                             key,
-                            cand.nodeId(),
-                            cand,
+                            owner.nodeId(),
+                            owner,
                             EVT_CACHE_OBJECT_LOCKED,
                             val,
                             hasVal,
@@ -754,38 +760,6 @@ public class GridDistributedCacheEntry extends GridCacheMapEntry {
                             true);
                     }
                 }
-            }
-        }
-    }
-
-    /**
-     * @param prev Previous owner.
-     * @param owner Current owner.
-     * @param val Entry value.
-     */
-    protected final void checkOwnerChanged(GridCacheMvccCandidate prev, GridCacheMvccCandidate owner, CacheObject val) {
-        assert !Thread.holdsLock(this);
-
-        if (owner != prev) {
-            cctx.mvcc().callback().onOwnerChanged(this, owner);
-
-            if (owner != null && owner.local())
-                checkThreadChain(owner);
-
-            if (prev != null && cctx.events().isRecordable(EVT_CACHE_OBJECT_UNLOCKED)) {
-                boolean hasVal = hasValue();
-
-                // Event notification.
-                cctx.events().addEvent(partition(), key, prev.nodeId(), prev, EVT_CACHE_OBJECT_UNLOCKED, val, hasVal,
-                    val, hasVal, null, null, null, true);
-            }
-
-            if (owner != null && cctx.events().isRecordable(EVT_CACHE_OBJECT_LOCKED)) {
-                boolean hasVal = hasValue();
-
-                // Event notification.
-                cctx.events().addEvent(partition(), key, owner.nodeId(), owner, EVT_CACHE_OBJECT_LOCKED, val, hasVal,
-                    val, hasVal, null, null, null, true);
             }
         }
     }

@@ -2469,28 +2469,106 @@ public class CacheSerializableTransactionsTest extends GridCommonAbstractTest {
 
             final AtomicInteger putKey = new AtomicInteger(1_000_000);
 
-            final int THREADS = 64;
+            ignite0.createCache(ccfg);
+
+            try {
+                checkNoReadLockConflict(ignite(0), ccfg.getName(), entry, putKey);
+
+                checkNoReadLockConflict(ignite(1), ccfg.getName(), entry, putKey);
+
+                checkNoReadLockConflict(ignite(SRVS), ccfg.getName(), entry, putKey);
+            }
+            finally {
+                destroyCache(ccfg.getName());
+            }
+        }
+    }
+
+    /**
+     * @param ignite Node.
+     * @param cacheName Cache name.
+     * @param entry If {@code true} then uses 'getEntry' to read value, otherwise uses 'get'.
+     * @param putKey Write key counter.
+     * @throws Exception If failed.
+     */
+    private void checkNoReadLockConflict(final Ignite ignite,
+        String cacheName,
+        final boolean entry,
+        final AtomicInteger putKey) throws Exception
+    {
+        final int THREADS = 64;
+
+        final IgniteCache<Integer, Integer> cache = ignite.cache(cacheName);
+
+        List<Integer> readKeys = testKeys(cache);
+
+        for (final Integer readKey : readKeys) {
+            final CyclicBarrier barrier = new CyclicBarrier(THREADS);
+
+            cache.put(readKey, Integer.MIN_VALUE);
+
+            GridTestUtils.runMultiThreaded(new Callable<Void>() {
+                @Override public Void call() throws Exception {
+                    try (Transaction tx = ignite.transactions().txStart(OPTIMISTIC, SERIALIZABLE)) {
+                        if (entry)
+                            cache.get(readKey);
+                        else
+                            cache.getEntry(readKey);
+
+                        barrier.await();
+
+                        cache.put(putKey.incrementAndGet(), 0);
+
+                        tx.commit();
+                    }
+
+                    return null;
+                }
+            }, THREADS, "test-thread");
+
+            assertEquals((Integer)Integer.MIN_VALUE, cache.get(readKey));
+
+            cache.put(readKey, readKey);
+
+            assertEquals(readKey, cache.get(readKey));
+        }
+    }
+
+    /**
+     * @throws Exception If failed.
+     */
+    public void testNoReadLockConflictMultiNode() throws Exception {
+        Ignite ignite0 = ignite(0);
+
+        for (final CacheConfiguration<Integer, Integer> ccfg : cacheConfigurations()) {
+            logCacheInfo(ccfg);
+
+            final AtomicInteger putKey = new AtomicInteger(1_000_000);
 
             ignite0.createCache(ccfg);
 
             try {
-                final Ignite ignite = ignite0;
-                final IgniteCache<Integer, Integer> cache = ignite.cache(ccfg.getName());
+                final int THREADS = 64;
 
-                List<Integer> readKeys = testKeys(cache);
+                IgniteCache<Integer, Integer> cache0 = ignite0.cache(ccfg.getName());
+
+                List<Integer> readKeys = testKeys(cache0);
 
                 for (final Integer readKey : readKeys) {
                     final CyclicBarrier barrier = new CyclicBarrier(THREADS);
 
-                    cache.put(readKey, 0);
+                    cache0.put(readKey, Integer.MIN_VALUE);
+
+                    final AtomicInteger idx = new AtomicInteger();
 
                     GridTestUtils.runMultiThreaded(new Callable<Void>() {
                         @Override public Void call() throws Exception {
+                            Ignite ignite = ignite(idx.incrementAndGet() % (CLIENTS + SRVS));
+
+                            IgniteCache<Integer, Integer> cache = ignite.cache(ccfg.getName());
+
                             try (Transaction tx = ignite.transactions().txStart(OPTIMISTIC, SERIALIZABLE)) {
-                                if (entry)
-                                    cache.get(readKey);
-                                else
-                                    cache.getEntry(readKey);
+                                cache.get(readKey);
 
                                 barrier.await();
 
@@ -2502,6 +2580,12 @@ public class CacheSerializableTransactionsTest extends GridCommonAbstractTest {
                             return null;
                         }
                     }, THREADS, "test-thread");
+
+                    assertEquals((Integer)Integer.MIN_VALUE, cache0.get(readKey));
+
+                    cache0.put(readKey, readKey);
+
+                    assertEquals(readKey, cache0.get(readKey));
                 }
             }
             finally {
@@ -2513,29 +2597,178 @@ public class CacheSerializableTransactionsTest extends GridCommonAbstractTest {
     /**
      * @throws Exception If failed.
      */
+    @SuppressWarnings("UnnecessaryLocalVariable")
     public void testReadLockPessimisticTxConflict() throws Exception {
-        // TODO: no conflict for write, read conflict with pessimistic tx.
+        Ignite ignite0 = ignite(0);
+
+        for (CacheConfiguration<Integer, Integer> ccfg : cacheConfigurations()) {
+            logCacheInfo(ccfg);
+
+            ignite0.createCache(ccfg);
+
+            try {
+                Ignite ignite = ignite0;
+
+                IgniteCache<Integer, Integer> cache = ignite.cache(ccfg.getName());
+
+                Integer writeKey = Integer.MAX_VALUE;
+
+                List<Integer> readKeys = testKeys(cache);
+
+                for (Integer readKey : readKeys) {
+                    CountDownLatch latch = new CountDownLatch(1);
+
+                    IgniteInternalFuture<?> fut = lockKey(latch, cache, readKey);
+
+                    try {
+                        // No conflict for write, conflict with pessimistic tx for read.
+                        try (Transaction tx = ignite.transactions().txStart(OPTIMISTIC, SERIALIZABLE)) {
+                            cache.put(writeKey, writeKey);
+
+                            cache.get(readKey);
+
+                            tx.commit();
+                        }
+
+                        fail();
+                    }
+                    catch (TransactionOptimisticException e) {
+                        log.info("Expected exception: " + e);
+                    }
+                    finally {
+                        latch.countDown();
+                    }
+
+                    fut.get();
+                }
+            }
+            finally {
+                destroyCache(ccfg.getName());
+            }
+        }
     }
 
     /**
      * @throws Exception If failed.
      */
+    @SuppressWarnings("UnnecessaryLocalVariable")
     public void testReadWriteTxConflict() throws Exception {
-        // TODO: no conflict for read, conflict for write.
-    }
+        Ignite ignite0 = ignite(0);
 
-    /**
-     * @throws Exception If failed.
-     */
-    public void testNoReadLockConflictMultiNode() throws Exception {
-        // TODO
+        for (CacheConfiguration<Integer, Integer> ccfg : cacheConfigurations()) {
+            logCacheInfo(ccfg);
+
+            ignite0.createCache(ccfg);
+
+            try {
+                Ignite ignite = ignite0;
+
+                IgniteCache<Integer, Integer> cache = ignite.cache(ccfg.getName());
+
+                Integer writeKey = Integer.MAX_VALUE;
+
+                List<Integer> readKeys = testKeys(cache);
+
+                for (Integer readKey : readKeys) {
+                    try {
+                        // No conflict for read, conflict for write.
+                        try (Transaction tx = ignite.transactions().txStart(OPTIMISTIC, SERIALIZABLE)) {
+                            cache.getAndPut(writeKey, writeKey);
+
+                            cache.get(readKey);
+
+                            updateKey(cache, writeKey, writeKey + readKey);
+
+                            tx.commit();
+                        }
+
+                        fail();
+                    }
+                    catch (TransactionOptimisticException e) {
+                        log.info("Expected exception: " + e);
+                    }
+
+                    assertEquals((Integer)(writeKey + readKey), cache.get(writeKey));
+                    assertNull(cache.get(readKey));
+
+                    cache.put(readKey, readKey);
+
+                    assertEquals(readKey, cache.get(readKey));
+                }
+            }
+            finally {
+                destroyCache(ccfg.getName());
+            }
+        }
     }
 
     /**
      * @throws Exception If failed.
      */
     public void testReadWriteTransactionsNoDeadlock() throws Exception {
-        // TODO
+        checkReadWriteTransactionsNoDeadlock(false);
+    }
+
+    /**
+     * @throws Exception If failed.
+     */
+    public void testReadWriteTransactionsNoDeadlockMultinode() throws Exception {
+        checkReadWriteTransactionsNoDeadlock(true);
+    }
+
+    /**
+     * @param multiNode Multi-node test flag.
+     * @throws Exception If failed.
+     */
+    private void checkReadWriteTransactionsNoDeadlock(final boolean multiNode) throws Exception {
+        final Ignite ignite0 = ignite(0);
+
+        for (final CacheConfiguration<Integer, Integer> ccfg : cacheConfigurations()) {
+            logCacheInfo(ccfg);
+
+            ignite0.createCache(ccfg);
+
+            try {
+                final long stopTime = U.currentTimeMillis() + 10_000;
+
+                final AtomicInteger idx = new AtomicInteger();
+
+                GridTestUtils.runMultiThreaded(new Callable<Void>() {
+                    @Override public Void call() throws Exception {
+                        Ignite ignite = multiNode ? ignite(idx.incrementAndGet() % (SRVS + CLIENTS)) : ignite0;
+
+                        IgniteCache<Integer, Integer> cache = ignite.cache(ccfg.getName());
+
+                        ThreadLocalRandom rnd = ThreadLocalRandom.current();
+
+                        while (U.currentTimeMillis() < stopTime) {
+                            try {
+                                try (Transaction tx = ignite.transactions().txStart(OPTIMISTIC, SERIALIZABLE)) {
+                                    for (int i = 0; i < 10; i++) {
+                                        Integer key = rnd.nextInt(30);
+
+                                        if (rnd.nextBoolean())
+                                            cache.get(key);
+                                        else
+                                            cache.put(key, key);
+                                    }
+
+                                    tx.commit();
+                                }
+                            }
+                            catch (TransactionOptimisticException ignore) {
+                                // No-op.
+                            }
+                        }
+
+                        return null;
+                    }
+                }, 32, "test-thread");
+            }
+            finally {
+                destroyCache(ccfg.getName());
+            }
+        }
     }
 
     /**
@@ -4287,10 +4520,12 @@ public class CacheSerializableTransactionsTest extends GridCommonAbstractTest {
         if (ccfg.getCacheMode() == PARTITIONED)
             keys.add(nearKey(cache));
 
-        keys.add(primaryKey(cache));
+        if (!cache.unwrap(Ignite.class).configuration().isClientMode()) {
+            keys.add(primaryKey(cache));
 
-        if (ccfg.getBackups() != 0)
-            keys.add(backupKey(cache));
+            if (ccfg.getBackups() != 0)
+                keys.add(backupKey(cache));
+        }
 
         return keys;
     }
