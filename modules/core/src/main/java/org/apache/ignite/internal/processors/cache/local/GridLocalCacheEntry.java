@@ -230,6 +230,24 @@ public class GridLocalCacheEntry extends GridCacheMapEntry {
                 if (unlocked) {
                     cctx.mvcc().callback().onOwnerChanged(this, null);
 
+                    if (cctx.events().isRecordable(EVT_CACHE_OBJECT_UNLOCKED)) {
+                        boolean hasVal = hasValue();
+
+                        cctx.events().addEvent(partition(),
+                            key,
+                            cand.nodeId(),
+                            cand,
+                            EVT_CACHE_OBJECT_UNLOCKED,
+                            val,
+                            hasVal,
+                            val,
+                            hasVal,
+                            null,
+                            null,
+                            null,
+                            true);
+                    }
+
                     break;
                 }
             }
@@ -237,14 +255,33 @@ public class GridLocalCacheEntry extends GridCacheMapEntry {
 
         if (owners != null) {
             for (int i = 0; i < owners.size(); i++) {
-                GridCacheMvccCandidate cand = owners.candidate(i);
+                GridCacheMvccCandidate owner = owners.candidate(i);
 
-                boolean locked = prevOwners == null || !prevOwners.hasCandidate(cand.version());
+                boolean locked = prevOwners == null || !prevOwners.hasCandidate(owner.version());
 
                 if (locked) {
-                    cctx.mvcc().callback().onOwnerChanged(this, cand);
+                    cctx.mvcc().callback().onOwnerChanged(this, owner);
 
-                    checkThreadChain(cand);
+                    checkThreadChain(owner);
+
+                    if (cctx.events().isRecordable(EVT_CACHE_OBJECT_LOCKED)) {
+                        boolean hasVal = hasValue();
+
+                        // Event notification.
+                        cctx.events().addEvent(partition(),
+                            key,
+                            owner.nodeId(),
+                            owner,
+                            EVT_CACHE_OBJECT_LOCKED,
+                            val,
+                            hasVal,
+                            val,
+                            hasVal,
+                            null,
+                            null,
+                            null,
+                            true);
+                    }
                 }
             }
         }

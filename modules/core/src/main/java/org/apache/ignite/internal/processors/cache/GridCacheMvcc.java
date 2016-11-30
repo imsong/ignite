@@ -150,15 +150,14 @@ public final class GridCacheMvcc {
     @Nullable public CacheLockCandidates localOwners() {
         if (locs != null) {
             assert !locs.isEmpty();
-
             CacheLockCandidates owners = null;
 
             GridCacheMvccCandidate first = locs.getFirst();
 
-            if (first.serializable() && first.read()) {
+            if (first.read()) {
                 for (GridCacheMvccCandidate cand : locs) {
                     if (cand.owner()) {
-                        assert cand.serializable() && cand.read() : cand;
+                        assert cand.read() : this;
 
                         if (owners != null) {
                             if (owners.size() == 1) {
@@ -175,7 +174,7 @@ public final class GridCacheMvcc {
                             owners = cand;
                     }
 
-                    if (!cand.serializable() || !cand.read())
+                    if (!cand.read())
                         break;
                 }
             }
@@ -876,18 +875,16 @@ public final class GridCacheMvcc {
                     if (c.owner())
                         continue;
 
-                    assert !c.ready() || (cand.read() && c.read()):
+                    assert !c.ready() || (c.read() && cand.read()):
                         "Cannot have more then one ready near-local candidate [c=" + c + ", cand=" + cand +
                             ", mvcc=" + this + ']';
 
-                    if (!c.ready()) {
-                        it.remove();
+                    it.remove();
 
-                        if (mvAfter == null)
-                            mvAfter = new LinkedList<>();
+                    if (mvAfter == null)
+                        mvAfter = new LinkedList<>();
 
-                        mvAfter.add(c);
-                    }
+                    mvAfter.add(c);
                 }
             }
 
@@ -1040,16 +1037,8 @@ public final class GridCacheMvcc {
             while (it.hasNext()) {
                 GridCacheMvccCandidate cand = it.next();
 
-                if (first && cand.serializable()) {
-                    if (!cand.read()) {
-                        if (cand.owner() || !cand.ready())
-                            return;
-
-                        cand.setOwner();
-                    }
-                    else {
-                        assert cand.serializable() : cand;
-
+                if (first) {
+                    if (cand.read()) {
                         if (cand.ready() && !cand.owner())
                             cand.setOwner();
 
@@ -1059,14 +1048,20 @@ public final class GridCacheMvcc {
                             if (!cand.read())
                                 break;
 
-                            assert cand.serializable() : cand;
-
                             if (cand.ready() && !cand.owner())
                                 cand.setOwner();
                         }
-                    }
 
-                    return;
+                        return;
+                    }
+                    else if (cand.serializable()) {
+                        if (cand.owner() || !cand.ready())
+                            return;
+
+                        cand.setOwner();
+
+                        return;
+                    }
                 }
 
                 first = false;
@@ -1151,7 +1146,7 @@ public final class GridCacheMvcc {
                     }
 
                     if (assigned) {
-                        assert !cand.serializable() && !cand.read() : cand;
+                        assert !cand.serializable() : cand;
 
                         it.remove();
 

@@ -668,7 +668,7 @@ public class GridDistributedCacheEntry extends GridCacheMapEntry {
     }
 
     /** {@inheritDoc} */
-    @Override public void txUnlock(IgniteInternalTx tx) throws GridCacheEntryRemovedException {
+    @Override public final void txUnlock(IgniteInternalTx tx) throws GridCacheEntryRemovedException {
         removeLock(tx.xidVersion());
     }
 
