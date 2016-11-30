@@ -487,7 +487,7 @@ public class GridNearCacheEntry extends GridDistributedCacheEntry {
         boolean read)
         throws GridCacheEntryRemovedException {
         CacheLockCandidates prev;
-        CacheLockCandidates owner;
+        CacheLockCandidates owner = null;
         GridCacheMvccCandidate cand;
 
         CacheObject val;
@@ -531,8 +531,6 @@ public class GridNearCacheEntry extends GridDistributedCacheEntry {
 
             cand.topologyVersion(topVer);
 
-            owner = mvcc.allOwners();
-
             boolean emptyAfter = mvcc.isEmpty();
 
             checkCallbacks(emptyBefore, emptyAfter);
@@ -541,6 +539,8 @@ public class GridNearCacheEntry extends GridDistributedCacheEntry {
 
             if (emptyAfter)
                 mvccExtras(null);
+            else
+                owner = mvcc.allOwners();
         }
 
         // This call must be outside of synchronization.
@@ -652,7 +652,7 @@ public class GridNearCacheEntry extends GridDistributedCacheEntry {
     /**
      * @throws GridCacheEntryRemovedException If entry was removed.
      */
-    public synchronized void reserveEviction() throws GridCacheEntryRemovedException {
+    synchronized void reserveEviction() throws GridCacheEntryRemovedException {
         checkObsolete();
 
         evictReservations++;
@@ -661,7 +661,7 @@ public class GridNearCacheEntry extends GridDistributedCacheEntry {
     /**
      *
      */
-    public synchronized void releaseEviction() {
+    synchronized void releaseEviction() {
         assert evictReservations > 0 : this;
         assert !obsolete() : this;
 

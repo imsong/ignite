@@ -23,9 +23,20 @@ import org.apache.ignite.internal.processors.cache.version.GridCacheVersion;
  *
  */
 public interface CacheLockCandidates {
+    /**
+     * @param idx Candidate index.
+     * @return Candidate.
+     */
     public GridCacheMvccCandidate candidate(int idx);
 
+    /**
+     * @return Number of candidates.
+     */
     public int size();
 
+    /**
+     * @param ver Candidate version.
+     * @return {@code True} if contains candidate with given version.
+     */
     public boolean hasCandidate(GridCacheVersion ver);
 }

@@ -67,7 +67,7 @@ public class GridDistributedCacheEntry extends GridCacheMapEntry {
     /**
      *
      */
-    protected void refreshRemotes() {
+    private void refreshRemotes() {
         GridCacheMvcc mvcc = mvccExtras();
 
         rmts = mvcc == null ? Collections.<GridCacheMvccCandidate>emptyList() : mvcc.remoteCandidates();
@@ -377,8 +377,6 @@ public class GridDistributedCacheEntry extends GridCacheMapEntry {
 
                 mvcc.remove(doomed.version());
 
-                owner = mvcc.allOwners();
-
                 boolean emptyAfter = mvcc.isEmpty();
 
                 if (!doomed.local())
@@ -388,6 +386,8 @@ public class GridDistributedCacheEntry extends GridCacheMapEntry {
 
                 if (emptyAfter)
                     mvccExtras(null);
+                else
+                    owner = mvcc.allOwners();
             }
 
             val = this.val;

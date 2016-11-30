@@ -150,6 +150,7 @@ public final class GridCacheMvcc {
     @Nullable public CacheLockCandidates localOwners() {
         if (locs != null) {
             assert !locs.isEmpty();
+
             CacheLockCandidates owners = null;
 
             GridCacheMvccCandidate first = locs.getFirst();
@@ -160,15 +161,19 @@ public final class GridCacheMvcc {
                         assert cand.read() : this;
 
                         if (owners != null) {
+                            CacheLockCandidatesList list;
+
                             if (owners.size() == 1) {
                                 GridCacheMvccCandidate owner = owners.candidate(0);
 
-                                owners = new CacheLockCandidatesList();
+                                owners = list = new CacheLockCandidatesList();
 
                                 ((CacheLockCandidatesList)owners).add(owner);
                             }
+                            else
+                                list = ((CacheLockCandidatesList)owners);
 
-                            ((CacheLockCandidatesList)owners).add(cand);
+                            list.add(cand);
                         }
                         else
                             owners = cand;
@@ -1062,9 +1067,9 @@ public final class GridCacheMvcc {
 
                         return;
                     }
-                }
 
-                first = false;
+                    first = false;
+                }
 
                 if (cand.owner())
                     return;

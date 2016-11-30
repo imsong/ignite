@@ -35,13 +35,15 @@ class CacheLockCandidatesList implements CacheLockCandidates {
      * @param cand Candidate to add.
      */
     void add(GridCacheMvccCandidate cand) {
-        assert !hasCandidate(cand.version());
+        assert !hasCandidate(cand.version()) : cand;
 
         list.add(cand);
     }
 
     /** {@inheritDoc} */
     @Override public GridCacheMvccCandidate candidate(int idx) {
+        assert idx < list.size() : idx;
+
         return list.get(idx);
     }
 

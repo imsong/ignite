@@ -89,7 +89,7 @@ public class GridLocalCacheEntry extends GridCacheMapEntry {
         CacheObject val;
         GridCacheMvccCandidate cand;
         CacheLockCandidates prev;
-        CacheLockCandidates owner;
+        CacheLockCandidates owner = null;
 
         synchronized (this) {
             checkObsolete();
@@ -124,10 +124,10 @@ public class GridLocalCacheEntry extends GridCacheMapEntry {
                 read
             );
 
-            owner = mvcc.localOwners();
-
             if (mvcc.isEmpty())
                 mvccExtras(null);
+            else
+                owner = mvcc.localOwners();
 
             val = this.val;
         }
@@ -296,7 +296,10 @@ public class GridLocalCacheEntry extends GridCacheMapEntry {
             for (int i = 0; i < prev.size(); i++) {
                 GridCacheMvccCandidate cand = prev.candidate(i);
 
-                checkThreadChain(cand);
+                boolean unlocked = owner == null || !owner.hasCandidate(cand.version());
+
+                if (unlocked)
+                    checkThreadChain(cand);
             }
         }
 
