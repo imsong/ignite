@@ -30,9 +30,6 @@ import org.apache.ignite.internal.processors.cache.version.GridCacheVersion;
 import org.apache.ignite.internal.util.typedef.internal.S;
 import org.jetbrains.annotations.Nullable;
 
-import static org.apache.ignite.events.EventType.EVT_CACHE_OBJECT_LOCKED;
-import static org.apache.ignite.events.EventType.EVT_CACHE_OBJECT_UNLOCKED;
-
 /**
  * Cache entry for local caches.
  */
@@ -89,6 +86,7 @@ public class GridLocalCacheEntry extends GridCacheMapEntry {
     ) throws GridCacheEntryRemovedException {
         assert serReadVer == null || serOrder != null;
 
+        CacheObject val;
         GridCacheMvccCandidate cand;
         CacheLockCandidates prev;
         CacheLockCandidates owner;
@@ -130,12 +128,14 @@ public class GridLocalCacheEntry extends GridCacheMapEntry {
 
             if (mvcc.isEmpty())
                 mvccExtras(null);
+
+            val = this.val;
         }
 
         if (cand != null && !cand.reentry())
             cctx.mvcc().addNext(cctx, cand);
 
-        checkOwnerChanged(prev, owner);
+        checkOwnerChanged(prev, owner, val);
 
         return cand;
     }
@@ -144,6 +144,7 @@ public class GridLocalCacheEntry extends GridCacheMapEntry {
      * @param cand Candidate.
      */
     void readyLocal(GridCacheMvccCandidate cand) {
+        CacheObject val;
         CacheLockCandidates prev = null;
         CacheLockCandidates owner = null;
 
@@ -158,9 +159,11 @@ public class GridLocalCacheEntry extends GridCacheMapEntry {
                 if (mvcc.isEmpty())
                     mvccExtras(null);
             }
+
+            val = this.val;
         }
 
-        checkOwnerChanged(prev, owner);
+        checkOwnerChanged(prev, owner, val);
     }
 
     /** {@inheritDoc} */
@@ -195,6 +198,7 @@ public class GridLocalCacheEntry extends GridCacheMapEntry {
      * Rechecks if lock should be reassigned.
      */
     public void recheck() {
+        CacheObject val;
         CacheLockCandidates prev = null;
         CacheLockCandidates owner = null;
 
@@ -209,88 +213,15 @@ public class GridLocalCacheEntry extends GridCacheMapEntry {
                 if (mvcc.isEmpty())
                     mvccExtras(null);
             }
+
+            val = this.val;
         }
 
-        checkOwnerChanged(prev, owner);
+        checkOwnerChanged(prev, owner, val);
     }
 
-    /**
-     * @param prevOwners Previous owners.
-     * @param owners Current owners.
-     */
-    private void checkOwnerChanged(@Nullable CacheLockCandidates prevOwners, @Nullable CacheLockCandidates owners) {
-        assert !Thread.holdsLock(this);
-
-        if (prevOwners != null) {
-            for (int i = 0; i < prevOwners.size(); i++) {
-                GridCacheMvccCandidate cand = prevOwners.candidate(i);
-
-                boolean unlocked = owners == null || !owners.hasCandidate(cand.version());
-
-                if (unlocked) {
-                    cctx.mvcc().callback().onOwnerChanged(this, null);
-
-                    if (cctx.events().isRecordable(EVT_CACHE_OBJECT_UNLOCKED)) {
-                        boolean hasVal = hasValue();
-
-                        cctx.events().addEvent(partition(),
-                            key,
-                            cand.nodeId(),
-                            cand,
-                            EVT_CACHE_OBJECT_UNLOCKED,
-                            val,
-                            hasVal,
-                            val,
-                            hasVal,
-                            null,
-                            null,
-                            null,
-                            true);
-                    }
-
-                    break;
-                }
-            }
-        }
-
-        if (owners != null) {
-            for (int i = 0; i < owners.size(); i++) {
-                GridCacheMvccCandidate owner = owners.candidate(i);
-
-                boolean locked = prevOwners == null || !prevOwners.hasCandidate(owner.version());
-
-                if (locked) {
-                    cctx.mvcc().callback().onOwnerChanged(this, owner);
-
-                    checkThreadChain(owner);
-
-                    if (cctx.events().isRecordable(EVT_CACHE_OBJECT_LOCKED)) {
-                        boolean hasVal = hasValue();
-
-                        // Event notification.
-                        cctx.events().addEvent(partition(),
-                            key,
-                            owner.nodeId(),
-                            owner,
-                            EVT_CACHE_OBJECT_LOCKED,
-                            val,
-                            hasVal,
-                            val,
-                            hasVal,
-                            null,
-                            null,
-                            null,
-                            true);
-                    }
-                }
-            }
-        }
-    }
-
-    /**
-     * @param owner Starting candidate in the chain.
-     */
-    private void checkThreadChain(GridCacheMvccCandidate owner) {
+    /** {@inheritDoc} */
+    @Override protected void checkThreadChain(GridCacheMvccCandidate owner) {
         assert !Thread.holdsLock(this);
 
         assert owner != null;
@@ -340,6 +271,7 @@ public class GridLocalCacheEntry extends GridCacheMapEntry {
      * @param threadId Thread ID.
      */
     private void releaseLocal(long threadId) {
+        CacheObject val;
         CacheLockCandidates prev = null;
         CacheLockCandidates owner = null;
 
@@ -356,6 +288,8 @@ public class GridLocalCacheEntry extends GridCacheMapEntry {
                 else
                     owner = mvcc.allOwners();
             }
+
+            val = this.val;
         }
 
         if (prev != null) {
@@ -366,11 +300,12 @@ public class GridLocalCacheEntry extends GridCacheMapEntry {
             }
         }
 
-        checkOwnerChanged(prev, owner);
+        checkOwnerChanged(prev, owner, val);
     }
 
     /** {@inheritDoc} */
     @Override public boolean removeLock(GridCacheVersion ver) throws GridCacheEntryRemovedException {
+        CacheObject val;
         CacheLockCandidates prev = null;
         CacheLockCandidates owner = null;
 
@@ -396,12 +331,14 @@ public class GridLocalCacheEntry extends GridCacheMapEntry {
                 else
                     owner = mvcc.allOwners();
             }
+
+            val = this.val;
         }
 
         if (doomed != null)
             checkThreadChain(doomed);
 
-        checkOwnerChanged(prev, owner);
+        checkOwnerChanged(prev, owner, val);
 
         return doomed != null;
     }

@@ -688,86 +688,8 @@ public class GridDistributedCacheEntry extends GridCacheMapEntry {
         }
     }
 
-    /**
-     * @param prevOwners Previous owners.
-     * @param owners Current owners.
-     * @param val Entry value.
-     */
-    protected final void checkOwnerChanged(@Nullable CacheLockCandidates prevOwners,
-        @Nullable CacheLockCandidates owners,
-        CacheObject val) {
-        assert !Thread.holdsLock(this);
-
-        if (prevOwners != null) {
-            for (int i = 0; i < prevOwners.size(); i++) {
-                GridCacheMvccCandidate cand = prevOwners.candidate(i);
-
-                boolean unlocked = owners == null || !owners.hasCandidate(cand.version());
-
-                if (unlocked) {
-                    cctx.mvcc().callback().onOwnerChanged(this, null);
-
-                    if (cctx.events().isRecordable(EVT_CACHE_OBJECT_UNLOCKED)) {
-                        boolean hasVal = hasValue();
-
-                        cctx.events().addEvent(partition(),
-                            key,
-                            cand.nodeId(),
-                            cand,
-                            EVT_CACHE_OBJECT_UNLOCKED,
-                            val,
-                            hasVal,
-                            val, hasVal,
-                            null,
-                            null,
-                            null,
-                            true);
-                    }
-
-                    break;
-                }
-            }
-        }
-
-        if (owners != null) {
-            for (int i = 0; i < owners.size(); i++) {
-                GridCacheMvccCandidate owner = owners.candidate(i);
-
-                boolean locked = prevOwners == null || !prevOwners.hasCandidate(owner.version());
-
-                if (locked) {
-                    cctx.mvcc().callback().onOwnerChanged(this, owner);
-
-                    if (owner.local())
-                        checkThreadChain(owner);
-
-                    if (cctx.events().isRecordable(EVT_CACHE_OBJECT_LOCKED)) {
-                        boolean hasVal = hasValue();
-
-                        // Event notification.
-                        cctx.events().addEvent(partition(),
-                            key,
-                            owner.nodeId(),
-                            owner,
-                            EVT_CACHE_OBJECT_LOCKED,
-                            val,
-                            hasVal,
-                            val,
-                            hasVal,
-                            null,
-                            null,
-                            null,
-                            true);
-                    }
-                }
-            }
-        }
-    }
-
-    /**
-     * @param owner Starting candidate in the chain.
-     */
-    protected void checkThreadChain(GridCacheMvccCandidate owner) {
+    /** {@inheritDoc} */
+    @Override final protected void checkThreadChain(GridCacheMvccCandidate owner) {
         assert !Thread.holdsLock(this);
 
         assert owner != null;
