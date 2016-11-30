@@ -440,6 +440,7 @@ class GridDhtPartitionTopologyImpl implements GridDhtPartitionTopology {
     }
 
     /**
+     * @param oldest Oldest server node.
      * @param aff Affinity assignments.
      * @param updateSeq Update sequence.
      */
@@ -1191,10 +1192,9 @@ class GridDhtPartitionTopologyImpl implements GridDhtPartitionTopology {
 
             boolean changed = cur == null || !cur.equals(parts);
 
-            if (changed)
+            if (changed) {
                 node2part.put(parts.nodeId(), parts);
 
-            if (changed) {
                 // Add new mappings.
                 for (Integer p : parts.keySet()) {
                     Set<UUID> ids = part2node.get(p);

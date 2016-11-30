@@ -106,7 +106,8 @@ public class GridDhtPartitionFullMap extends HashMap<UUID, GridDhtPartitionMap2>
             GridDhtPartitionMap2 cpy = new GridDhtPartitionMap2(part.nodeId(),
                 part.updateSequence(),
                 part.topologyVersion(),
-                part.map(), onlyActive);
+                part.map(),
+                onlyActive);
 
             put(e.getKey(), cpy);
         }
